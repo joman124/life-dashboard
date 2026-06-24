@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0E0C08;
+  --card: #17140E;
+  --card-inset: #100E0A;
+  --hairline: #272217;
+  --gold: #E5A83B;
+  --gold-dim: #8A6A2F;
+  --text: #EFEAE0;
+  --muted: #9C937F;
+  --faint: #6B6354;
+  --green: #5BC98C;
+  --red: #E07A6B;
+
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Display serif — big numerals and section headlines. */
+.font-display {
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+/* Eyebrow labels: 11px uppercase, 0.14em tracking, muted. */
+.eyebrow {
+  font-size: 11px;
+  line-height: 1.3;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+/* Card surface: 16px radius, 1px hairline border. */
+.card {
+  background: var(--card);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+}
+
+/* Highlighted/insight cards get a gold-tinted border. */
+.card-gold {
+  border-color: var(--gold-dim);
+}
+
+/* Form fields (Track tab). */
+.input {
+  width: 100%;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--card-inset);
+  color: var(--text);
+  padding: 9px 10px;
+  font-size: 14px;
+  outline: none;
+}
+.input::placeholder {
+  color: var(--faint);
+}
+.input:focus {
+  border-color: var(--gold-dim);
+}
+
+/* Hide native number spinners — the UI provides its own steppers. */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+button:focus-visible,
+.input:focus-visible {
+  outline: 2px solid var(--gold-dim);
+  outline-offset: 2px;
+}

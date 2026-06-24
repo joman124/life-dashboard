@@ -1,0 +1,10 @@
+node_modules/
+.next/
+data/
+
+# local env files (keep .env.local.example tracked)
+.env
+.env.local
+.env*.local
+
+*.tsbuildinfo
