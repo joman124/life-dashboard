@@ -23,6 +23,15 @@ body {
   color: var(--text);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
+
+  /* Installed to an iPhone home screen the app runs edge to edge under a
+     translucent status bar (viewportFit: 'cover'), so the greeting would sit
+     beneath the clock without these insets. They resolve to 0 everywhere
+     else, so the desktop and browser layouts are unchanged. */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* Display serif — big numerals and section headlines. */
