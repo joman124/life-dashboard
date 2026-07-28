@@ -1,6 +1,7 @@
 node_modules/
 .next/
 data/
+coverage/
 
 # local env files (keep .env.local.example tracked)
 .env
