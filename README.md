@@ -1,6 +1,6 @@
 # Life Dashboard
 
-Life Dashboard is a personal command center for your day, your week, and your habits — a mobile-first, single-user web app with a dark editorial look and a gold accent. Five tabs (**Today**, **Week**, **Trends**, **Streaks**, **Track**) turn the metrics you care about — deep work, sleep, steps, phone pickups, and anything custom you add — into sparklines, scorecards, streaks, and plain-language correlations like "on days your sleep is higher, your deep work tends to be higher too." It runs entirely on your machine: a local Next.js server and a single SQLite file. No cloud account, no signup, no monthly fee — just your data, on your computer.
+Life Dashboard is a personal command center for your day, your week, and your habits — a mobile-first, single-user web app with a dark editorial look and a gold accent. Five tabs (**Today**, **Week**, **Trends**, **Streaks**, **Track**) turn the metrics you care about — deep work, sleep, steps, phone pickups, and anything custom you add — into sparklines, scorecards, streaks, and plain-language correlations like "on days your sleep is higher, your deep work tends to be higher too." It runs entirely on your machine: a local Next.js server and a single SQLite file. No cloud account, no signup, no monthly fee — just your data, on your computer. Add it to your phone's home screen and it launches like a native app.
 
 ## Requirements
 
@@ -19,7 +19,58 @@ npm run dev
 
 Then open **http://localhost:3000**.
 
-On the very first run, Life Dashboard seeds 30 days of realistic sample data automatically — so Today, Week, Trends, and Streaks all have something to show you immediately, with no setup required. Your data lives in `data/life-dashboard.db` (a single SQLite file, gitignored) and survives server restarts. To start over with a clean slate, stop the server and delete that file; it will be re-seeded the next time you run `npm run dev`.
+On the very first run, Life Dashboard seeds 30 days of realistic sample data automatically — so Today, Week, Trends, and Streaks all have something to show you immediately, with no setup required. Your data lives in `data/life-dashboard.db` (a single SQLite file, gitignored) and survives server restarts.
+
+**Once you start logging for real, clear the sample data**: Track → Your data → **Clear all logged history**. It deletes every entry but keeps your metrics, so your streaks and correlations reflect only you. Until you do, the numbers on your dashboard are partly generated.
+
+## Everyday use
+
+**Logging.** The Today tab has a stepper for each active metric. Above them is a strip of the last seven days — tap any day to log or correct it, so forgetting to open the app on Tuesday doesn't cost you Tuesday. A dot under a day means it already has at least one entry, which makes gaps in the week obvious at a glance. Streaks are forgiving about *today* specifically: an unlogged today doesn't break a run, but a logged miss does.
+
+**Changing what you track.** Track → each metric row has **Edit** (emoji, name, goal, direction) and, inside that, **Delete**. The distinction matters:
+
+- The **switch** stops tracking a metric but keeps all of its history. This is what you want almost always.
+- **Delete** permanently removes the metric *and every entry ever logged against it*. It asks first, and it cannot be undone.
+
+**Adding your own.** Track → *Add your own*. Type a name and an emoji is chosen for you from a keyword list (`Meditation` → 🧘, `Cold plunge` → 🧊); override it if you'd rather. New metrics appear across every tab immediately.
+
+## Backing up and restoring
+
+Track → **Your data**:
+
+- **Export data (JSON)** downloads everything — metrics and entries — as `life-dashboard-export.json`.
+- **Restore from a file** reads that file back. Two modes:
+  - **Merge** (default) upserts: anything the file doesn't mention is left alone, anything it does is overwritten.
+  - **Replace** wipes metrics and entries first, so the result is exactly the file.
+- **Clear all logged history** deletes every entry and timeline event, keeping your metric definitions.
+
+Restores are all-or-nothing. Every row is validated before anything is written, and a bad file is rejected with the specific problem (`entries[4].date must be a YYYY-MM-DD string`) rather than partially applied. Export first if you're about to do anything destructive — it's the only undo.
+
+## Install it on your phone
+
+The dashboard is a PWA, so it can live on your home screen and launch without browser chrome.
+
+1. Start the server with `npm run dev:lan` (binds to your LAN, not just localhost).
+2. On your phone, open `http://<your-PC-IP>:3000` — run `ipconfig` to find the IP.
+3. **iOS**: Share → *Add to Home Screen*. **Android**: menu → *Install app*.
+
+It only works while your PC is running the server and both devices are on the same Wi-Fi — this is a local app, not a hosted one.
+
+## Running the tests
+
+```bash
+npm test
+```
+
+223 tests cover the logic that's easy to break silently: correlation math and its 8-paired-points floor, streak rules, direction-aware deltas, local-date arithmetic across DST and leap days, health-payload matching, token verification, and import validation.
+
+```bash
+npm run test:coverage
+```
+
+Enforces 80% coverage on `lib/` (currently ~99% of statements). `npm run typecheck` runs TypeScript with no emit.
+
+> **Note:** don't run `npm run build` while `npm run dev` is running — they share the `.next` directory, and the build will leave the dev server serving 500s with `MODULE_NOT_FOUND`. If that happens, stop the server, delete `.next`, and start again. Your data is untouched; it lives in `data/`.
 
 ## Connecting Google Calendar + Gmail (from scratch)
 
@@ -216,10 +267,11 @@ Connector errors are shown verbatim in the Track tab by design — if something 
 
 - Everything runs locally. There is no cloud backend and no third-party server in the loop besides Google's own OAuth and API endpoints, which you're calling directly.
 - OAuth tokens are stored server-side inside the gitignored `data/` folder — encrypted at rest if you set `TOKEN_ENCRYPTION_KEY`, otherwise stored in plain text but still local-only and never committed to git.
-- You can export all of your data at any time as a JSON file using the **Export** button in the Track tab.
+- You can export all of your data at any time as a JSON file, and restore it just as easily — see [Backing up and restoring](#backing-up-and-restoring).
 - Disconnecting Google in the Connectors panel removes the stored tokens immediately.
+- The health-import webhook is the one endpoint reachable from another device on your network. It requires a bearer token, compared in constant time, and you can rotate it at any time from Track → Connectors → Apple Health, which invalidates the old one immediately.
 
 ## Roadmap
 
-- **Phase 3: Apple Health**, via an iOS Shortcut that posts steps and sleep data to a local webhook — no cloud API exists for HealthKit, so this is the only viable automation path. See [Connecting Apple Health](#connecting-apple-health-ios-shortcut) above.
-- **Future wearables** (Oura, Whoop, Fitbit) have real cloud APIs, so they can be added as proper OAuth server-side connectors — the connector layer built in Phase 2 (the `oauth_tokens` table plus the per-connector status pattern) already supports a new provider being just a new `/api/auth/<provider>` route and a sync function.
+- **Future wearables** (Oura, Whoop, Fitbit) have real cloud APIs, so they can be added as proper OAuth server-side connectors — the `oauth_tokens` table plus the per-connector status pattern means a new provider is just a new `/api/auth/<provider>` route and a sync function.
+- **Hosted deployment.** The storage layer runs on `@libsql/client`, which drives a local SQLite file in development and a remote [Turso](https://turso.tech) database in production from the same code path. Setting `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` is all that's needed to run somewhere with a read-only filesystem, such as Vercel. See `.env.local.example`.
