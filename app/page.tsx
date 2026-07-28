@@ -239,6 +239,8 @@ export default function Page() {
             metrics={dash.metrics}
             onToggle={(id, active) => void dash.setMetricActive(id, active)}
             onAdd={dash.addMetric}
+            onEdit={dash.editMetric}
+            onDelete={dash.removeMetric}
             refresh={dash.refresh}
           />
         )}

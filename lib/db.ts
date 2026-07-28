@@ -322,6 +322,31 @@ export async function updateMetric(id: string, patch: MetricPatch): Promise<Metr
   return getMetricById(id);
 }
 
+/**
+ * Permanently delete a metric and every entry recorded against it.
+ * Returns false if the id is unknown.
+ *
+ * This is a genuine hard delete, distinct from setting active = false (which
+ * stops tracking a metric but keeps its history). The entries are removed
+ * first, in the same write batch, because entries.metricId is a foreign key
+ * into metrics(id) — dropping the metric first would either fail or strand
+ * unreachable rows that still count toward exports and correlations.
+ */
+export async function deleteMetric(id: string): Promise<boolean> {
+  const existing = await getMetricById(id);
+  if (!existing) return false;
+
+  const client = await getClient();
+  await client.batch(
+    [
+      { sql: 'DELETE FROM entries WHERE metricId = ?', args: [id] },
+      { sql: 'DELETE FROM metrics WHERE id = ?', args: [id] },
+    ],
+    'write'
+  );
+  return true;
+}
+
 /* ----------------------------------------------------------------- entries */
 
 export async function listEntriesBetween(startDate: string, endDate: string): Promise<Entry[]> {

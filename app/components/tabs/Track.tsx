@@ -7,8 +7,9 @@
 import { useState } from 'react';
 import type { Metric } from '@/lib/types';
 import { autoEmoji } from '@/lib/autoEmoji';
-import type { NewMetricInput } from '../useDashboard';
+import type { MetricPatchInput, NewMetricInput } from '../useDashboard';
 import ConnectorPanel from '../ConnectorPanel';
+import MetricSettingsRow from '../MetricSettingsRow';
 
 const UNIT_OPTIONS: { value: Metric['unit']; label: string }[] = [
   { value: 'h', label: 'hours' },
@@ -21,11 +22,15 @@ export default function Track({
   metrics,
   onToggle,
   onAdd,
+  onEdit,
+  onDelete,
   refresh,
 }: {
   metrics: Metric[];
   onToggle: (id: string, active: boolean) => void;
   onAdd: (input: NewMetricInput) => Promise<string | null>;
+  onEdit: (id: string, patch: MetricPatchInput) => Promise<string | null>;
+  onDelete: (id: string) => Promise<string | null>;
   refresh: () => Promise<void>;
 }) {
   const [name, setName] = useState('');
@@ -72,45 +77,14 @@ export default function Track({
         {metrics.map((m, i) => (
           <div
             key={m.id}
-            className="flex items-center gap-3 py-3"
             style={i > 0 ? { borderTop: '1px solid var(--hairline)' } : undefined}
           >
-            <span className="w-7 shrink-0 text-center text-[20px]" aria-hidden="true">
-              {m.emoji}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline gap-2">
-                <span className="truncate text-[14px] font-medium">{m.name}</span>
-                <span className="eyebrow shrink-0 !text-[9.5px] text-[color:var(--faint)]">
-                  {m.category}
-                </span>
-              </div>
-              {m.description && (
-                <p className="mt-0.5 truncate text-[12px] text-[color:var(--muted)]">
-                  {m.description}
-                </p>
-              )}
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={m.active}
-              aria-label={`Track ${m.name}`}
-              onClick={() => onToggle(m.id, !m.active)}
-              className="relative h-[26px] w-[46px] shrink-0 rounded-full transition-colors duration-150"
-              style={{
-                background: m.active ? 'var(--gold)' : 'var(--card-inset)',
-                border: `1px solid ${m.active ? 'var(--gold)' : 'var(--hairline)'}`,
-              }}
-            >
-              <span
-                className="absolute left-[2px] top-1/2 h-[20px] w-[20px] rounded-full transition-transform duration-150"
-                style={{
-                  transform: m.active ? 'translate(20px, -50%)' : 'translate(0, -50%)',
-                  background: m.active ? '#171107' : 'var(--muted)',
-                }}
-              />
-            </button>
+            <MetricSettingsRow
+              metric={m}
+              onToggle={onToggle}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
           </div>
         ))}
       </section>

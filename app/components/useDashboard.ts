@@ -21,6 +21,14 @@ export interface NewMetricInput {
   emoji?: string;
 }
 
+/** Fields an existing metric can be edited to. All optional — a partial patch. */
+export interface MetricPatchInput {
+  name?: string;
+  emoji?: string;
+  goal?: number;
+  goalDirection?: Metric['goalDirection'];
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const body = (await res.json().catch(() => null)) as unknown;
@@ -124,6 +132,48 @@ export function useDashboard() {
     [refresh],
   );
 
+  /**
+   * Edit a metric's editable fields. Resolves to an error message, or null on
+   * success, so the calling form can keep the user's input on failure instead
+   * of discarding it.
+   */
+  const editMetric = useCallback(
+    async (id: string, patch: MetricPatchInput): Promise<string | null> => {
+      try {
+        await fetchJson<Metric>(`/api/metrics/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        });
+        await refresh();
+        return null;
+      } catch (err) {
+        return errorMessage(err, 'Could not save the metric.');
+      }
+    },
+    [refresh],
+  );
+
+  /**
+   * Permanently delete a metric and its history. Resolves to an error message,
+   * or null on success. Not optimistic: a destructive action should only leave
+   * the UI once the server has confirmed it.
+   */
+  const removeMetric = useCallback(
+    async (id: string): Promise<string | null> => {
+      try {
+        await fetchJson<{ deleted: string }>(`/api/metrics/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+        });
+        await refresh();
+        return null;
+      } catch (err) {
+        return errorMessage(err, 'Could not delete the metric.');
+      }
+    },
+    [refresh],
+  );
+
   /** Create a custom metric. Resolves to an error message, or null on success. */
   const addMetric = useCallback(
     async (input: NewMetricInput): Promise<string | null> => {
@@ -156,6 +206,8 @@ export function useDashboard() {
     logEntry,
     setMetricActive,
     addMetric,
+    editMetric,
+    removeMetric,
     dismissActionError,
   };
 }

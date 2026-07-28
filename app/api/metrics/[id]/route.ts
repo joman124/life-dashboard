@@ -1,9 +1,18 @@
 /**
- * PATCH /api/metrics/[id] — partial update of a metric.
- * 200 with the updated Metric, 404 for an unknown id, 400 for invalid fields.
+ * PATCH  /api/metrics/[id] — partial update of a metric.
+ *                            200 with the updated Metric, 404 unknown id,
+ *                            400 invalid fields.
+ * DELETE /api/metrics/[id] — permanently delete a metric and its entries.
+ *                            200 with { deleted, entriesDeleted }, 404 unknown id.
  */
 import { NextResponse } from 'next/server';
-import { getMetricById, updateMetric, type MetricPatch } from '@/lib/db';
+import {
+  deleteMetric,
+  getMetricById,
+  listAllEntries,
+  updateMetric,
+  type MetricPatch,
+} from '@/lib/db';
 import { jsonError, toErrorMessage } from '@/lib/http';
 import { isCategory, isFiniteNumber, isGoalDirection, isUnit } from '@/lib/validate';
 
@@ -76,6 +85,25 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const updated = await updateMetric(params.id, patch);
     if (!updated) return jsonError(`Unknown metric id "${params.id}".`, 404);
     return NextResponse.json(updated);
+  } catch (e) {
+    return jsonError(toErrorMessage(e), 500);
+  }
+}
+
+export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+  try {
+    const metric = await getMetricById(params.id);
+    if (!metric) return jsonError(`Unknown metric id "${params.id}".`, 404);
+
+    // Counted before the delete so the response can tell the user exactly how
+    // much history went with it — a destructive action should never be silent
+    // about its blast radius.
+    const entriesDeleted = (await listAllEntries()).filter(
+      (e) => e.metricId === params.id,
+    ).length;
+
+    await deleteMetric(params.id);
+    return NextResponse.json({ deleted: params.id, name: metric.name, entriesDeleted });
   } catch (e) {
     return jsonError(toErrorMessage(e), 500);
   }
