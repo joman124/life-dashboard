@@ -74,10 +74,13 @@ export function useDashboard() {
     void refresh();
   }, [refresh]);
 
-  /** Upsert today's entry: optimistic local update, POST, then refresh. */
+  /**
+   * Upsert an entry: optimistic local update, POST, then refresh.
+   * `date` defaults to today; pass an earlier YYYY-MM-DD to backfill a day
+   * that was missed.
+   */
   const logEntry = useCallback(
-    async (metricId: string, value: number) => {
-      const date = todayISO();
+    async (metricId: string, value: number, date: string = todayISO()) => {
       setEntries((prev) => {
         const idx = prev.findIndex((e) => e.metricId === metricId && e.date === date);
         if (idx === -1) return [...prev, { metricId, date, value }];
@@ -89,11 +92,11 @@ export function useDashboard() {
         await fetchJson<Entry>('/api/entries', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ metricId, value }),
+          body: JSON.stringify({ metricId, value, date }),
         });
         setActionError(null);
       } catch (err) {
-        setActionError(errorMessage(err, `Could not save today's ${metricId} entry.`));
+        setActionError(errorMessage(err, `Could not save the ${metricId} entry for ${date}.`));
       } finally {
         await refresh();
       }

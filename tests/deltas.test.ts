@@ -23,19 +23,19 @@ describe('deltaVsBaseline — percentage', () => {
 
   test('rounds to the nearest whole percent', () => {
     // mean = 3, current = 4 → 33.33% → 33
-    expect(deltaVsBaseline(4, [3], '>=').pct).toBe(33);
+    expect(deltaVsBaseline(4, [3], '>=')?.pct).toBe(33);
     // mean = 3, current = 5 → 66.67% → 67
-    expect(deltaVsBaseline(5, [3], '>=').pct).toBe(67);
+    expect(deltaVsBaseline(5, [3], '>=')?.pct).toBe(67);
   });
 
   test('handles a baseline mean larger than current by more than 100%', () => {
     // mean = 10, current = 0 → -100%
-    expect(deltaVsBaseline(0, [10], '>=').pct).toBe(-100);
+    expect(deltaVsBaseline(0, [10], '>=')?.pct).toBe(-100);
   });
 
   test('handles growth beyond 100%', () => {
     // mean = 2, current = 6 → +200%
-    expect(deltaVsBaseline(6, [2], '>=').pct).toBe(200);
+    expect(deltaVsBaseline(6, [2], '>=')?.pct).toBe(200);
   });
 });
 
@@ -61,8 +61,8 @@ describe('deltaVsBaseline — direction-aware "good"', () => {
 
   test('treats no change as good in both directions', () => {
     // pct === 0 satisfies both `pct >= 0` and `pct <= 0`.
-    expect(deltaVsBaseline(4, [4], '>=').good).toBe(true);
-    expect(deltaVsBaseline(4, [4], '<=').good).toBe(true);
+    expect(deltaVsBaseline(4, [4], '>=')?.good).toBe(true);
+    expect(deltaVsBaseline(4, [4], '<=')?.good).toBe(true);
   });
 });
 

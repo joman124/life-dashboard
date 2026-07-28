@@ -5,7 +5,7 @@ import type { Entry, Metric, TimelineItem } from '@/lib/types';
 import { topCorrelations } from '@/lib/correlations';
 import MetricCard from '../MetricCard';
 import InsightCard from '../InsightCard';
-import LogToday from '../LogToday';
+import LogEntries from '../LogEntries';
 import Timeline from '../Timeline';
 
 export default function Today({
@@ -19,7 +19,7 @@ export default function Today({
   entries: Entry[];
   timeline: TimelineItem[];
   today: string;
-  onLog: (metricId: string, value: number) => void;
+  onLog: (metricId: string, value: number, date: string) => void;
 }) {
   const active = metrics.filter((m) => m.active);
   const insight = topCorrelations(
@@ -41,7 +41,7 @@ export default function Today({
         </section>
       )}
       {insight && <InsightCard pair={insight} metrics={metrics} />}
-      <LogToday metrics={active} entries={entries} today={today} onLog={onLog} />
+      <LogEntries metrics={active} entries={entries} today={today} onLog={onLog} />
       <Timeline items={timeline} />
     </div>
   );
