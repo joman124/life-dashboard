@@ -9,6 +9,7 @@ import type { Metric } from '@/lib/types';
 import { autoEmoji } from '@/lib/autoEmoji';
 import type { MetricPatchInput, NewMetricInput } from '../useDashboard';
 import ConnectorPanel from '../ConnectorPanel';
+import DataPanel from '../DataPanel';
 import MetricSettingsRow from '../MetricSettingsRow';
 
 const UNIT_OPTIONS: { value: Metric['unit']; label: string }[] = [
@@ -187,6 +188,7 @@ export default function Track({
       </section>
 
       <ConnectorPanel refresh={refresh} />
+      <DataPanel refresh={refresh} />
     </div>
   );
 }
