@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   try {
     // --- auth ---
     const presented = extractToken(req);
-    if (!presented || !verifyHealthToken(presented)) {
+    if (!presented || !(await verifyHealthToken(presented))) {
       return jsonError('Invalid or missing bearer token', 401);
     }
 
@@ -54,20 +54,20 @@ export async function POST(req: Request) {
     }
 
     // --- match + persist ---
-    const result = matchHealthPayload(body as Record<string, unknown>, listMetrics(), todayISO());
+    const result = matchHealthPayload(body as Record<string, unknown>, await listMetrics(), todayISO());
     for (const { metricId, value } of result.imported) {
-      upsertEntry(metricId, result.date, value);
+      await upsertEntry(metricId, result.date, value);
     }
 
     const lastImport = new Date().toISOString();
-    setSyncValue('last_health_import', lastImport);
+    await setSyncValue('last_health_import', lastImport);
 
     return NextResponse.json({
       date: result.date,
       imported: result.imported.map((i) => ({ metricId: i.metricId, value: i.value })),
       ignored: result.ignored,
       importedCount: result.imported.length,
-      lastImport: getSyncValue('last_health_import') ?? lastImport,
+      lastImport: (await getSyncValue('last_health_import')) ?? lastImport,
     });
   } catch (e) {
     return jsonError(toErrorMessage(e), 500);

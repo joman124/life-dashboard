@@ -13,8 +13,8 @@ export async function GET() {
   try {
     const payload = {
       exportedAt: new Date().toISOString(),
-      metrics: listMetrics(),
-      entries: listAllEntries(),
+      metrics: await listMetrics(),
+      entries: await listAllEntries(),
     };
     return NextResponse.json(payload, {
       headers: {

@@ -20,7 +20,7 @@ export async function GET(req: Request) {
       if (!ISO_DATE_RE.test(raw)) return jsonError('"date" must be a YYYY-MM-DD string.', 400);
       date = raw;
     }
-    return NextResponse.json(listTimelineForDate(date));
+    return NextResponse.json(await listTimelineForDate(date));
   } catch (e) {
     return jsonError(toErrorMessage(e), 500);
   }

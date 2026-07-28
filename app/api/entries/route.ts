@@ -25,7 +25,7 @@ export async function GET(req: Request) {
     }
     const end = todayISO();
     const start = addDays(end, -(days - 1));
-    return NextResponse.json(listEntriesBetween(start, end));
+    return NextResponse.json(await listEntriesBetween(start, end));
   } catch (e) {
     return jsonError(toErrorMessage(e), 500);
   }
@@ -52,11 +52,11 @@ export async function POST(req: Request) {
       date = body.date;
     }
 
-    if (!getMetricById(metricId)) {
+    if (!(await getMetricById(metricId))) {
       return jsonError(`Unknown metric id "${metricId}".`, 404);
     }
 
-    return NextResponse.json(upsertEntry(metricId, date, value));
+    return NextResponse.json(await upsertEntry(metricId, date, value));
   } catch (e) {
     return jsonError(toErrorMessage(e), 500);
   }

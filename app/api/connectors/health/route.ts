@@ -19,10 +19,12 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    const token = await getOrCreateHealthToken();
+    const lastImport = await getSyncValue('last_health_import');
     return NextResponse.json({
-      token: getOrCreateHealthToken(),
+      token,
       endpoint: '/api/health-import',
-      lastImport: getSyncValue('last_health_import'),
+      lastImport,
     });
   } catch (e) {
     return jsonError(toErrorMessage(e), 500);

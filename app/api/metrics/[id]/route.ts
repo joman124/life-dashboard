@@ -17,7 +17,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return jsonError('Request body must be a JSON object.', 400);
     }
 
-    if (!getMetricById(params.id)) {
+    if (!(await getMetricById(params.id))) {
       return jsonError(`Unknown metric id "${params.id}".`, 404);
     }
 
@@ -73,7 +73,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       );
     }
 
-    const updated = updateMetric(params.id, patch);
+    const updated = await updateMetric(params.id, patch);
     if (!updated) return jsonError(`Unknown metric id "${params.id}".`, 404);
     return NextResponse.json(updated);
   } catch (e) {

@@ -16,6 +16,7 @@
  * Dates seeded: today-30 .. today-1. TODAY is intentionally left unlogged so
  * "Log Today" starts fresh and the today-optional streak logic is exercised.
  */
+import type { InStatement } from '@libsql/client';
 import type { DB } from '@/lib/db';
 import { addDays, todayISO } from '@/lib/dates';
 
@@ -204,14 +205,20 @@ function generate(dates: string[], coupling: number): { rows: SeedEntry[]; r: nu
 /**
  * Populates an empty database. Called by lib/db.ts when the metrics table has
  * zero rows. Timeline and sync_state are intentionally left empty in Phase 1.
+ *
+ * The generation + Pearson-coupling verify loop below is pure and synchronous
+ * (a fixed-seed PRNG, so reseeding on the same calendar day is deterministic);
+ * only the database writes are async. All inserts go out as a single libSQL
+ * write batch, which is atomic — the metrics and entries either all land or none
+ * do, matching the original better-sqlite3 transaction semantics.
  */
-export function seed(db: DB): void {
+export async function seed(client: DB): Promise<void> {
   const today = todayISO();
   const dates: string[] = [];
   for (let i = 30; i >= 1; i--) dates.push(addDays(today, -i)); // today-30 .. today-1
 
   // Generate, then VERIFY the demo correlation the spec requires; bump coupling
-  // and regenerate until r(sleep, deep-work) >= 0.65.
+  // and regenerate until r(sleep, deep-work) >= 0.65. Pure/synchronous.
   let coupling = 1.55;
   let { rows, r } = generate(dates, coupling);
   let guard = 0;
@@ -221,19 +228,23 @@ export function seed(db: DB): void {
     guard++;
   }
 
-  const insertMetric = db.prepare(
-    `INSERT INTO metrics (id, name, emoji, unit, goal, goalDirection, step, "max", active, category, description)
-     VALUES (@id, @name, @emoji, @unit, @goal, @goalDirection, @step, @max, @active, @category, @description)`
-  );
-  const insertEntry = db.prepare(
-    `INSERT INTO entries (metricId, date, value) VALUES (?, ?, ?)
-     ON CONFLICT (metricId, date) DO UPDATE SET value = excluded.value`
-  );
+  const statements: InStatement[] = [];
+  for (const m of DEFAULT_METRICS) {
+    statements.push({
+      sql: `INSERT INTO metrics (id, name, emoji, unit, goal, goalDirection, step, "max", active, category, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [m.id, m.name, m.emoji, m.unit, m.goal, m.goalDirection, m.step, m.max, m.active, m.category, m.description],
+    });
+  }
+  for (const row of rows) {
+    statements.push({
+      sql: `INSERT INTO entries (metricId, date, value) VALUES (?, ?, ?)
+            ON CONFLICT (metricId, date) DO UPDATE SET value = excluded.value`,
+      args: [row.metricId, row.date, row.value],
+    });
+  }
 
-  db.transaction(() => {
-    for (const m of DEFAULT_METRICS) insertMetric.run(m);
-    for (const row of rows) insertEntry.run(row.metricId, row.date, row.value);
-  })();
+  await client.batch(statements, 'write');
 
   console.log(
     `[seed] inserted ${DEFAULT_METRICS.length} metrics and ${rows.length} entries ` +

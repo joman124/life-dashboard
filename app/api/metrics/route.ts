@@ -22,17 +22,17 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    return NextResponse.json(listMetrics());
+    return NextResponse.json(await listMetrics());
   } catch (e) {
     return jsonError(toErrorMessage(e), 500);
   }
 }
 
 /** First free id for a slug: base, base-2, base-3, ... */
-function uniqueMetricId(base: string): string {
-  if (!getMetricById(base)) return base;
+async function uniqueMetricId(base: string): Promise<string> {
+  if (!(await getMetricById(base))) return base;
   let n = 2;
-  while (getMetricById(`${base}-${n}`)) n++;
+  while (await getMetricById(`${base}-${n}`)) n++;
   return `${base}-${n}`;
 }
 
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     const emojiOverride = typeof body.emoji === 'string' ? body.emoji.trim() : '';
 
     const metric: Metric = {
-      id: uniqueMetricId(slugify(name)),
+      id: await uniqueMetricId(slugify(name)),
       name,
       emoji: emojiOverride || autoEmoji(name),
       unit,
@@ -87,7 +87,7 @@ export async function POST(req: Request) {
       description: body.description !== undefined ? (body.description as string) : '',
     };
 
-    return NextResponse.json(createMetric(metric), { status: 201 });
+    return NextResponse.json(await createMetric(metric), { status: 201 });
   } catch (e) {
     return jsonError(toErrorMessage(e), 500);
   }

@@ -40,7 +40,7 @@ export async function GET(req: Request) {
     const email = await fetchAccountEmail(client);
 
     // Persist last (after email lookup) so the stored row carries the email.
-    persistTokens(tokens, email);
+    await persistTokens(tokens, email);
 
     return home('status=connected');
   } catch (e) {

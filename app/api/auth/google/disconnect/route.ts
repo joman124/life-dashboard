@@ -12,9 +12,9 @@ export const dynamic = 'force-dynamic';
 
 export async function POST() {
   try {
-    deleteOAuthToken('google');
-    deleteSyncValue('today_inbox_count');
-    deleteSyncValue('last_google_sync');
+    await deleteOAuthToken('google');
+    await deleteSyncValue('today_inbox_count');
+    await deleteSyncValue('last_google_sync');
     return NextResponse.json({ ok: true });
   } catch (e) {
     return jsonError(toErrorMessage(e), 500);

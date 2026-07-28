@@ -133,7 +133,7 @@ async function syncCalendar(auth: Auth.OAuth2Client, today: string): Promise<Cal
     items.push({ date: today, time, title, detail });
   }
 
-  replaceCalendarTimeline(today, items);
+  await replaceCalendarTimeline(today, items);
 
   return {
     timelineCount: items.length,
@@ -191,7 +191,7 @@ export async function syncGoogle(auth: Auth.OAuth2Client): Promise<SyncResult> {
     // Only write Deep Work when at least one event matched. Writing 0 on a day
     // with no matching events would clobber a manually-logged value — so we skip.
     if (outcome.deepWorkMatched) {
-      upsertEntry('deep-work', today, outcome.deepWorkHours);
+      await upsertEntry('deep-work', today, outcome.deepWorkHours);
       deepWork = { hours: outcome.deepWorkHours };
     }
   } catch (e) {
@@ -201,14 +201,14 @@ export async function syncGoogle(auth: Auth.OAuth2Client): Promise<SyncResult> {
   // Gmail (independent failure).
   try {
     const inboxCount = await syncGmailInboxCount(auth, today);
-    setSyncValue('today_inbox_count', String(inboxCount));
+    await setSyncValue('today_inbox_count', String(inboxCount));
     gmail = { inboxCount };
   } catch (e) {
     errors.gmail = apiErrorMessage(e);
   }
 
   const lastSync = new Date().toISOString();
-  setSyncValue('last_google_sync', lastSync);
+  await setSyncValue('last_google_sync', lastSync);
 
   return {
     calendar: { events: calendarEvents },

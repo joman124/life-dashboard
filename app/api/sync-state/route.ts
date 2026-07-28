@@ -12,8 +12,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const lastGoogleSync = getSyncValue('last_google_sync');
-    const inboxRaw = getSyncValue('today_inbox_count');
+    const lastGoogleSync = await getSyncValue('last_google_sync');
+    const inboxRaw = await getSyncValue('today_inbox_count');
     const parsed = inboxRaw === null ? NaN : Number(inboxRaw);
     const todayInboxCount = Number.isFinite(parsed) ? parsed : null;
     return NextResponse.json({ lastGoogleSync, todayInboxCount });

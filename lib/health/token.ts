@@ -30,18 +30,18 @@ function generateToken(): string {
  * Return the stored health-import token, generating and persisting one on first
  * use. Idempotent: once created, subsequent calls return the same value.
  */
-export function getOrCreateHealthToken(): string {
-  const existing = getSyncValue(TOKEN_KEY);
+export async function getOrCreateHealthToken(): Promise<string> {
+  const existing = await getSyncValue(TOKEN_KEY);
   if (existing) return existing;
   const token = generateToken();
-  setSyncValue(TOKEN_KEY, token);
+  await setSyncValue(TOKEN_KEY, token);
   return token;
 }
 
 /** Generate a brand-new token, persist it (replacing any old one), and return it. */
-export function rotateHealthToken(): string {
+export async function rotateHealthToken(): Promise<string> {
   const token = generateToken();
-  setSyncValue(TOKEN_KEY, token);
+  await setSyncValue(TOKEN_KEY, token);
   return token;
 }
 
@@ -51,8 +51,8 @@ export function rotateHealthToken(): string {
  * throws on unequal-length buffers, so we length-check first — this short-
  * circuit is unavoidable and does not leak the secret's content).
  */
-export function verifyHealthToken(presented: string): boolean {
-  const stored = getSyncValue(TOKEN_KEY);
+export async function verifyHealthToken(presented: string): Promise<boolean> {
+  const stored = await getSyncValue(TOKEN_KEY);
   if (!stored) return false;
 
   const a = Buffer.from(presented, 'utf8');

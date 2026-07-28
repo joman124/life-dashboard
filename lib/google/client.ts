@@ -152,9 +152,9 @@ export function decryptTokenJson(stored: string): Auth.Credentials {
  * so we never drop the refresh_token. `email` is updated only when provided
  * (refresh callbacks don't carry it). NEVER logs token contents.
  */
-export function persistTokens(tokens: Auth.Credentials, email?: string | null): void {
+export async function persistTokens(tokens: Auth.Credentials, email?: string | null): Promise<void> {
   let merged: Auth.Credentials = tokens;
-  const existing = getOAuthToken(PROVIDER);
+  const existing = await getOAuthToken(PROVIDER);
   let existingEmail: string | null = existing?.email ?? null;
   if (existing) {
     try {
@@ -171,7 +171,7 @@ export function persistTokens(tokens: Auth.Credentials, email?: string | null): 
     }
   }
   const finalEmail = email !== undefined && email !== null ? email : existingEmail;
-  setOAuthToken(PROVIDER, encryptTokenJson(merged), finalEmail);
+  await setOAuthToken(PROVIDER, encryptTokenJson(merged), finalEmail);
 }
 
 /**
@@ -180,8 +180,8 @@ export function persistTokens(tokens: Auth.Credentials, email?: string | null): 
  * connector is configured but not connected). May throw if decryption fails —
  * callers should surface that as a connector 'error' state.
  */
-export function getAuthedClient(): Auth.OAuth2Client | null {
-  const stored = getOAuthToken(PROVIDER);
+export async function getAuthedClient(): Promise<Auth.OAuth2Client | null> {
+  const stored = await getOAuthToken(PROVIDER);
   if (!stored) return null;
 
   const client = makeOAuthClient();
@@ -192,13 +192,16 @@ export function getAuthedClient(): Auth.OAuth2Client | null {
   // refresh_token is present; this listener writes the new access token (and
   // any rotated refresh_token) back to the DB. Merge logic in persistTokens
   // guarantees the refresh_token is never lost.
+  //
+  // The listener is synchronous (googleapis fires it internally and does not
+  // await it), so persistTokens — now async — runs fire-and-forget; we attach a
+  // .catch() so a persistence failure can never crash an in-flight API request
+  // or surface as an unhandled rejection. The refreshed token still lives in
+  // memory on this client instance regardless.
   client.on('tokens', (refreshed) => {
-    try {
-      persistTokens(refreshed);
-    } catch {
-      // Never let a persistence failure crash an in-flight API request; the
-      // refreshed token still lives in memory for this client instance.
-    }
+    void persistTokens(refreshed).catch(() => {
+      /* swallow: see comment above */
+    });
   });
 
   return client;

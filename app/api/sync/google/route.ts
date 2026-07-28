@@ -24,7 +24,7 @@ export async function POST() {
 
     let client;
     try {
-      client = getAuthedClient();
+      client = await getAuthedClient();
     } catch (e) {
       // Stored token unreadable (e.g. TOKEN_ENCRYPTION_KEY changed).
       return jsonError(`Could not load Google credentials: ${toErrorMessage(e)}`, 400);

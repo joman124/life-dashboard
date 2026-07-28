@@ -8,14 +8,13 @@
     "start": "next start"
   },
   "dependencies": {
-    "better-sqlite3": "^12.4.1",
+    "@libsql/client": "^0.14.0",
     "googleapis": "^144.0.0",
     "next": "^14.2.30",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

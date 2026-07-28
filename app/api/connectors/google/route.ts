@@ -33,8 +33,8 @@ export async function GET() {
   try {
     const configured = isConfigured();
 
-    const lastSync = getSyncValue('last_google_sync');
-    const inboxRaw = getSyncValue('today_inbox_count');
+    const lastSync = await getSyncValue('last_google_sync');
+    const inboxRaw = await getSyncValue('today_inbox_count');
     const parsed = inboxRaw === null ? NaN : Number(inboxRaw);
     const todayInboxCount = Number.isFinite(parsed) ? parsed : null;
 
@@ -51,7 +51,7 @@ export async function GET() {
       return NextResponse.json(body);
     }
 
-    const stored = getOAuthToken('google');
+    const stored = await getOAuthToken('google');
     if (!stored) {
       const body: ConnectorStatus = {
         configured: true,

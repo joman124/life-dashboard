@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST() {
   try {
-    return NextResponse.json({ token: rotateHealthToken() });
+    return NextResponse.json({ token: await rotateHealthToken() });
   } catch (e) {
     return jsonError(toErrorMessage(e), 500);
   }
