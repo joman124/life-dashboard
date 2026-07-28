@@ -1,0 +1,138 @@
+import { describe, expect, test } from 'vitest';
+import { addDays, dayLabel, formatDateLong, lastNDates, todayISO } from '@/lib/dates';
+
+describe('todayISO', () => {
+  test('returns the local calendar date, not the UTC one', () => {
+    // Arrange: the local calendar fields of "now", assembled independently of
+    // the implementation. This is the assertion that actually matters — a naive
+    // toISOString() implementation reports the wrong day for anyone west of UTC
+    // in the evening (and east of UTC in the early morning).
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const expected = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+    // Act & Assert
+    expect(todayISO()).toBe(expected);
+  });
+
+  test('is formatted as YYYY-MM-DD', () => {
+    expect(todayISO()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe('addDays', () => {
+  test('adds days within a month', () => {
+    expect(addDays('2026-06-12', 3)).toBe('2026-06-15');
+  });
+
+  test('subtracts days with a negative offset', () => {
+    expect(addDays('2026-06-12', -3)).toBe('2026-06-09');
+  });
+
+  test('returns the same date for an offset of zero', () => {
+    expect(addDays('2026-06-12', 0)).toBe('2026-06-12');
+  });
+
+  test('rolls forward across a month boundary', () => {
+    expect(addDays('2026-06-30', 1)).toBe('2026-07-01');
+  });
+
+  test('rolls backward across a month boundary', () => {
+    expect(addDays('2026-07-01', -1)).toBe('2026-06-30');
+  });
+
+  test('rolls across a year boundary', () => {
+    expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
+    expect(addDays('2027-01-01', -1)).toBe('2026-12-31');
+  });
+
+  test('handles February in a leap year', () => {
+    // 2028 is a leap year, so Feb 29 exists.
+    expect(addDays('2028-02-28', 1)).toBe('2028-02-29');
+    expect(addDays('2028-02-29', 1)).toBe('2028-03-01');
+  });
+
+  test('handles February in a non-leap year', () => {
+    expect(addDays('2026-02-28', 1)).toBe('2026-03-01');
+  });
+
+  test('crosses a spring-forward DST boundary without losing a day', () => {
+    // US DST began 2026-03-08. Adding a day across it must advance the calendar
+    // date by exactly one, even though that local day is only 23 hours long.
+    expect(addDays('2026-03-07', 1)).toBe('2026-03-08');
+    expect(addDays('2026-03-08', 1)).toBe('2026-03-09');
+  });
+
+  test('crosses a fall-back DST boundary without repeating a day', () => {
+    // US DST ended 2026-11-01 — a 25-hour local day.
+    expect(addDays('2026-10-31', 1)).toBe('2026-11-01');
+    expect(addDays('2026-11-01', 1)).toBe('2026-11-02');
+  });
+
+  test('spans a large offset correctly', () => {
+    expect(addDays('2026-01-01', 365)).toBe('2027-01-01');
+  });
+});
+
+describe('lastNDates', () => {
+  test('returns n dates ending at endISO, oldest first', () => {
+    expect(lastNDates('2026-06-12', 4)).toEqual([
+      '2026-06-09',
+      '2026-06-10',
+      '2026-06-11',
+      '2026-06-12',
+    ]);
+  });
+
+  test('includes the end date as the final element', () => {
+    const dates = lastNDates('2026-06-12', 14);
+    expect(dates).toHaveLength(14);
+    expect(dates[dates.length - 1]).toBe('2026-06-12');
+  });
+
+  test('returns just the end date for n = 1', () => {
+    expect(lastNDates('2026-06-12', 1)).toEqual(['2026-06-12']);
+  });
+
+  test('returns an empty array for n = 0', () => {
+    expect(lastNDates('2026-06-12', 0)).toEqual([]);
+  });
+
+  test('produces strictly ascending dates', () => {
+    const dates = lastNDates('2026-03-10', 30);
+    const sorted = [...dates].sort();
+    expect(dates).toEqual(sorted);
+    expect(new Set(dates).size).toBe(30);
+  });
+});
+
+describe('dayLabel', () => {
+  test('returns the short weekday name', () => {
+    // 2026-06-12 is a Friday.
+    expect(dayLabel('2026-06-12')).toBe('Fri');
+  });
+
+  test('covers a full week without repeating', () => {
+    const labels = lastNDates('2026-06-12', 7).map(dayLabel);
+    expect(new Set(labels).size).toBe(7);
+    expect(labels).toEqual(['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+  });
+});
+
+describe('formatDateLong', () => {
+  test('formats as "Weekday, Month D"', () => {
+    expect(formatDateLong('2026-06-12')).toBe('Friday, June 12');
+  });
+
+  test('does not zero-pad the day of month', () => {
+    expect(formatDateLong('2026-06-01')).toBe('Monday, June 1');
+  });
+
+  test('formats a January date correctly (month index 0)', () => {
+    expect(formatDateLong('2026-01-15')).toBe('Thursday, January 15');
+  });
+
+  test('formats a December date correctly (month index 11)', () => {
+    expect(formatDateLong('2026-12-25')).toBe('Friday, December 25');
+  });
+});
