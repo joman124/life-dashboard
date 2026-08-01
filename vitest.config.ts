@@ -16,7 +16,7 @@ export default defineConfig({
       // Routes, React components, and the DB driver are exercised by the
       // integration script and manual verification instead.
       include: ['lib/**/*.ts'],
-      exclude: ['lib/db.ts', 'lib/seed.ts', 'lib/google/**', 'lib/types.ts'],
+      exclude: ['lib/db/**', 'lib/seed.ts', 'lib/google/**', 'lib/types.ts'],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
     },
   },
