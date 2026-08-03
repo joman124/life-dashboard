@@ -2,6 +2,7 @@ node_modules/
 .next/
 data/
 coverage/
+HANDOFF.md
 
 # local env files (keep .env.local.example tracked)
 .env
@@ -9,3 +10,5 @@ coverage/
 .env*.local
 
 *.tsbuildinfo
+
+.vercel

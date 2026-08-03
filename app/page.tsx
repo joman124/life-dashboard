@@ -142,7 +142,7 @@ export default function Page() {
                 aria-selected={isActive}
                 aria-label={t.name}
                 onClick={() => setTab(t.id)}
-                className="relative py-3 text-[13px] font-medium"
+                className="relative min-h-11 py-3 text-[13px] font-medium"
                 style={{ color: isActive ? 'var(--gold)' : 'var(--muted)' }}
               >
                 {t.label}

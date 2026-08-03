@@ -66,7 +66,7 @@ export default function LogEntries({
       <div
         role="group"
         aria-label="Choose the day to log"
-        className="mt-2.5 flex items-stretch gap-1"
+        className="mt-2.5 flex items-stretch gap-0.5"
       >
         {days.map((d) => {
           const active = d === selected;
@@ -78,7 +78,7 @@ export default function LogEntries({
               onClick={() => setDate(d)}
               aria-pressed={active}
               aria-label={formatDateLong(d)}
-              className="flex flex-1 flex-col items-center gap-0.5 rounded-lg border py-1.5 active:scale-95"
+              className="flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg border py-1.5 active:scale-95"
               style={{
                 borderColor: active ? 'var(--gold-dim)' : 'var(--hairline)',
                 background: active ? 'var(--card-inset)' : 'transparent',
@@ -131,7 +131,7 @@ export default function LogEntries({
                   type="button"
                   onClick={() => bump(m, cur, logged, -1)}
                   aria-label={`Decrease ${m.name}`}
-                  className="grid h-8 w-8 place-items-center rounded-full border text-[16px] leading-none active:scale-95"
+                  className="grid h-11 w-11 place-items-center rounded-full border text-[18px] leading-none active:scale-95"
                   style={{
                     borderColor: 'var(--hairline)',
                     background: 'var(--card-inset)',
@@ -155,7 +155,7 @@ export default function LogEntries({
                   type="button"
                   onClick={() => bump(m, cur, logged, 1)}
                   aria-label={`Increase ${m.name}`}
-                  className="grid h-8 w-8 place-items-center rounded-full border text-[16px] leading-none active:scale-95"
+                  className="grid h-11 w-11 place-items-center rounded-full border text-[18px] leading-none active:scale-95"
                   style={{
                     borderColor: 'var(--hairline)',
                     background: 'var(--card-inset)',

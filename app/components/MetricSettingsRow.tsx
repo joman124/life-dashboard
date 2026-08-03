@@ -246,7 +246,7 @@ export default function MetricSettingsRow({
         type="button"
         onClick={() => setMode('edit')}
         aria-label={`Edit ${metric.name}`}
-        className="shrink-0 rounded-lg border px-2 py-1 text-[11px]"
+        className="tap shrink-0 rounded-lg border px-2 py-1 text-[11px]"
         style={{ borderColor: 'var(--hairline)', color: 'var(--muted)' }}
       >
         Edit
@@ -258,7 +258,7 @@ export default function MetricSettingsRow({
         aria-checked={metric.active}
         aria-label={`Track ${metric.name}`}
         onClick={() => onToggle(metric.id, !metric.active)}
-        className="relative h-[26px] w-[46px] shrink-0 rounded-full transition-colors duration-150"
+        className="tap h-[26px] w-[46px] shrink-0 rounded-full transition-colors duration-150"
         style={{
           background: metric.active ? 'var(--gold)' : 'var(--card-inset)',
           border: `1px solid ${metric.active ? 'var(--gold)' : 'var(--hairline)'}`,

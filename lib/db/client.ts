@@ -101,6 +101,16 @@ function rawClient(): Client {
   if (remoteUrl) {
     url = remoteUrl;
   } else {
+    // Serverless filesystems are read-only, so the mkdir below would fail with
+    // a bare `ENOENT: mkdir '/var/task/data'` on every route — an error that
+    // says nothing about the actual cause. Name it instead.
+    if (process.env.VERCEL) {
+      throw new Error(
+        'TURSO_DATABASE_URL is not set. Serverless has no writable filesystem, ' +
+          'so the local file database cannot be used here — connect a Turso ' +
+          'database (Vercel → Storage → Turso) and redeploy.',
+      );
+    }
     const dataDir = path.join(process.cwd(), 'data');
     fs.mkdirSync(dataDir, { recursive: true });
     url = 'file:' + path.join(dataDir, 'life-dashboard.db');

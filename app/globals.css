@@ -18,6 +18,11 @@
   color-scheme: dark;
 }
 
+html {
+  /* Stop iOS inflating body text when the phone is rotated to landscape. */
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -68,7 +73,10 @@ body {
   background: var(--card-inset);
   color: var(--text);
   padding: 9px 10px;
-  font-size: 14px;
+  /* 16px is not a style choice: iOS Safari zooms the whole page in when a
+     focused field is smaller than that, and never zooms back out. Anything
+     under 16px makes the Track tab unusable on a phone. */
+  font-size: 16px;
   outline: none;
 }
 .input::placeholder {
@@ -92,4 +100,33 @@ button:focus-visible,
 .input:focus-visible {
   outline: 2px solid var(--gold-dim);
   outline-offset: 2px;
+}
+
+/* Touch behaviour for every control. Logging a day means tapping + six or
+   seven times in a row, and by default mobile Safari treats that as a
+   double-tap: it zooms the page, delays each tap ~300ms, flashes a grey
+   highlight, and pops the text-selection callout on the − / + glyphs. */
+button,
+[role='switch'],
+[role='tab'] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Hit slop: grow a small control's touch target to the 44px iOS/WCAG minimum
+   without changing how it looks or what it occupies in the layout. Use on
+   controls that are deliberately small (toggles, inline Edit buttons). */
+.tap {
+  position: relative;
+}
+.tap::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
 }
