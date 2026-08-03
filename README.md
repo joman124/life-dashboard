@@ -54,7 +54,24 @@ The dashboard is a PWA, so it can live on your home screen and launch without br
 2. On your phone, open `http://<your-PC-IP>:3000` — run `ipconfig` to find the IP.
 3. **iOS**: Share → *Add to Home Screen*. **Android**: menu → *Install app*.
 
-It only works while your PC is running the server and both devices are on the same Wi-Fi — this is a local app, not a hosted one.
+Over the LAN it only works while your PC is running the server and both devices are on the same Wi-Fi. Deploy it (below) and it works from anywhere.
+
+## Deploying it privately
+
+The app is deployed on Vercel and locked behind a single password. There are no user accounts — this is a personal dashboard, so one shared password is the whole auth model.
+
+Set `APP_PASSWORD` (at least 16 characters) in the Vercel project's environment variables, alongside `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. Then:
+
+- Visiting any page without a session redirects to `/login`.
+- Signing in sets an httpOnly cookie holding a SHA-256 digest of the password — never the password itself.
+- API routes answer with a JSON `401` rather than login HTML, so a failed fetch surfaces a real error.
+- **`POST /api/health-import` is deliberately exempt.** The iOS Shortcut can't sign in, and that route already authenticates with `HEALTH_IMPORT_TOKEN`.
+
+There is no logout button. The cookie is derived from the password, so changing `APP_PASSWORD` in Vercel signs every device out at once — which is the revocation you actually want if a phone goes missing.
+
+On localhost an unset `APP_PASSWORD` means no gate at all, because typing a password to use the dev server buys nothing. On a deployment, an unset or too-short password is treated as a misconfiguration and every request returns `503` instead of quietly serving your data to the internet.
+
+> Don't use Vercel Authentication for this app. It blocks the Apple Health webhook outright (a Shortcut can't complete an SSO flow), and iOS gives home-screen PWAs their own cookie jar, so the sign-in bounces out to Safari and loops.
 
 ## Running the tests
 
@@ -62,7 +79,7 @@ It only works while your PC is running the server and both devices are on the sa
 npm test
 ```
 
-223 tests cover the logic that's easy to break silently: correlation math and its 8-paired-points floor, streak rules, direction-aware deltas, local-date arithmetic across DST and leap days, health-payload matching, token verification, and import validation.
+235 tests cover the logic that's easy to break silently: correlation math and its 8-paired-points floor, streak rules, direction-aware deltas, local-date arithmetic across DST and leap days, health-payload matching, token verification, session-token derivation, and import validation.
 
 ```bash
 npm run test:coverage
@@ -265,8 +282,9 @@ Connector errors are shown verbatim in the Track tab by design — if something 
 
 ## Data & privacy
 
-- Everything runs locally. There is no cloud backend and no third-party server in the loop besides Google's own OAuth and API endpoints, which you're calling directly.
-- OAuth tokens are stored server-side inside the gitignored `data/` folder — encrypted at rest if you set `TOKEN_ENCRYPTION_KEY`, otherwise stored in plain text but still local-only and never committed to git.
+- Run locally, nothing leaves your machine except your own calls to Google's OAuth and API endpoints. Deployed, the data lives in your Turso database and the app is reachable only with the app password.
+- The GitHub repository is private, and the deployment is gated — see [Deploying it privately](#deploying-it-privately).
+- OAuth tokens are stored server-side — in the gitignored `data/` folder locally, in Turso when deployed — encrypted at rest if you set `TOKEN_ENCRYPTION_KEY`, otherwise plain text. Set the key on any deployment.
 - You can export all of your data at any time as a JSON file, and restore it just as easily — see [Backing up and restoring](#backing-up-and-restoring).
 - Disconnecting Google in the Connectors panel removes the stored tokens immediately.
 - The health-import webhook is the one endpoint reachable from another device on your network. It requires a bearer token, compared in constant time, and you can rotate it at any time from Track → Connectors → Apple Health, which invalidates the old one immediately.
@@ -274,4 +292,4 @@ Connector errors are shown verbatim in the Track tab by design — if something 
 ## Roadmap
 
 - **Future wearables** (Oura, Whoop, Fitbit) have real cloud APIs, so they can be added as proper OAuth server-side connectors — the `oauth_tokens` table plus the per-connector status pattern means a new provider is just a new `/api/auth/<provider>` route and a sync function.
-- **Hosted deployment.** The storage layer runs on `@libsql/client`, which drives a local SQLite file in development and a remote [Turso](https://turso.tech) database in production from the same code path. Setting `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` is all that's needed to run somewhere with a read-only filesystem, such as Vercel. See `.env.local.example`.
+- ~~**Hosted deployment.**~~ Done. The storage layer runs on `@libsql/client`, which drives a local SQLite file in development and a remote [Turso](https://turso.tech) database in production from the same code path — so the same code runs on Vercel's read-only filesystem. See [Deploying it privately](#deploying-it-privately) and `.env.local.example`.
