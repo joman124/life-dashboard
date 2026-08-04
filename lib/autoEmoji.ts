@@ -17,6 +17,9 @@ const RULES = [
   [['writ'], '✍️'],
   [['water'], '💧'],
   [['sleep'], '😴'],
+  // Before 'phone': "screen time" is its own metric, and 📱 reads as time spent
+  // where 📵 reads as pickups avoided.
+  [['screen'], '📱'],
   [['phone'], '📵'],
   [['pray', 'gratitude'], '🙏'],
   [['cold'], '🧊'],

@@ -92,7 +92,7 @@ Rounded pills, small font, colored background tint.
 |---|---|---|---|---|---|
 | Deep Work | 🧠 | h | 4 | >= | yes |
 | Phone Pickups | 📵 | count | 50 | <= | yes |
-| Sleep | 😴 | h | 7.5 | >= | yes |
+| Sleep | 😴 | h | 6.5 | >= | yes |
 | Steps | 👟 | count | 8000 | >= | yes |
 | Energy | ⚡ | /10 | 7 | >= | **no** |
 

@@ -68,7 +68,7 @@ const DEFAULT_METRICS: SeedMetric[] = [
     name: 'Sleep',
     emoji: '😴',
     unit: 'h',
-    goal: 7.5,
+    goal: 6.5,
     goalDirection: '>=',
     step: 0.25,
     max: 12,

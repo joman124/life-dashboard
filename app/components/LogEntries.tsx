@@ -15,22 +15,29 @@ import { useState } from 'react';
 import type { Entry, Metric } from '@/lib/types';
 import { addDays, dayLabel, formatDateLong, lastNDates } from '@/lib/dates';
 import { formatValue, unitSuffix } from './format';
+import QuickLogForm, { type PendingEntry } from './QuickLogForm';
 
 /** How many days back the strip lets you reach, including today. */
 const DAY_WINDOW = 7;
+
+/** Steppers suit small nudges; the form suits typing 9,336. Both write the same rows. */
+type Mode = 'steppers' | 'form';
 
 export default function LogEntries({
   metrics,
   entries,
   today,
   onLog,
+  onSaveAll,
 }: {
   metrics: Metric[];
   entries: Entry[];
   today: string;
   onLog: (metricId: string, value: number, date: string) => void;
+  onSaveAll: (date: string, values: PendingEntry[]) => Promise<string | null>;
 }) {
   const [date, setDate] = useState(today);
+  const [mode, setMode] = useState<Mode>('steppers');
 
   // Guard against the day rolling over while the tab is open: if `today` moves
   // past the selected date's window, fall back to today rather than stranding
@@ -48,18 +55,42 @@ export default function LogEntries({
 
   return (
     <section className="card p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="eyebrow">{isToday ? 'Log today' : 'Log'}</div>
-        {!isToday && (
-          <button
-            type="button"
-            onClick={() => setDate(today)}
-            className="text-[11px] underline underline-offset-2"
-            style={{ color: 'var(--gold)' }}
+        <div className="flex items-center gap-2.5">
+          {!isToday && (
+            <button
+              type="button"
+              onClick={() => setDate(today)}
+              className="text-[11px] underline underline-offset-2"
+              style={{ color: 'var(--gold)' }}
+            >
+              Back to today
+            </button>
+          )}
+          <div
+            role="group"
+            aria-label="Entry style"
+            className="flex overflow-hidden rounded-lg border"
+            style={{ borderColor: 'var(--hairline)' }}
           >
-            Back to today
-          </button>
-        )}
+            {(['steppers', 'form'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                aria-pressed={mode === m}
+                className="px-2.5 py-1.5 text-[11px]"
+                style={{
+                  background: mode === m ? 'var(--card-inset)' : 'transparent',
+                  color: mode === m ? 'var(--gold)' : 'var(--muted)',
+                }}
+              >
+                {m === 'steppers' ? 'Steppers' : 'Form'}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Day strip — oldest on the left, today on the right. */}
@@ -108,7 +139,19 @@ export default function LogEntries({
         </p>
       )}
 
-      <div className="mt-1">
+      {metrics.length > 0 && mode === 'form' && (
+        // Keyed by date so switching days remounts the form with that day's
+        // values, instead of stranding the previous day's numbers in the inputs.
+        <QuickLogForm
+          key={selected}
+          metrics={metrics}
+          entries={entries}
+          date={selected}
+          onSaveAll={onSaveAll}
+        />
+      )}
+
+      <div className={mode === 'form' ? 'hidden' : 'mt-1'}>
         {metrics.map((m, i) => {
           const entry = entries.find((e) => e.metricId === m.id && e.date === selected);
           const logged = entry !== undefined;
@@ -168,6 +211,11 @@ export default function LogEntries({
             </div>
           );
         })}
+      </div>
+
+      {/* Outside the mode-switched block: an empty roster is worth saying in
+          either view, and hiding it would leave the card blank in form mode. */}
+      <div>
         {metrics.length === 0 && (
           <p className="py-3 text-[13px] text-[color:var(--muted)]">
             No active metrics — turn some on in the ⚙ Track tab.

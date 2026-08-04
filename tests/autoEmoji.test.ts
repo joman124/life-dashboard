@@ -8,6 +8,12 @@ describe('autoEmoji — keyword matching', () => {
     expect(autoEmoji('Gym')).toBe('🏋️');
   });
 
+  test('gives screen time its own emoji, ahead of phone', () => {
+    // "Screen Time" must not fall through to 📵, which reads as pickups avoided.
+    expect(autoEmoji('Screen Time')).toBe('📱');
+    expect(autoEmoji('Phone Pickups')).toBe('📵');
+  });
+
   test('is case-insensitive', () => {
     expect(autoEmoji('SLEEP')).toBe('😴');
     expect(autoEmoji('sleep')).toBe('😴');

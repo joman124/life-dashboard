@@ -112,6 +112,54 @@ export function useDashboard() {
     [refresh],
   );
 
+  /**
+   * Upsert several entries for one date at once — what the quick-entry form
+   * submits. Posts in parallel and refreshes ONCE, rather than the refresh-per
+   * -field storm that calling logEntry in a loop would produce.
+   *
+   * Resolves to an error message or null. Partial failure is reported as such:
+   * with five independent writes, "3 of 5 saved" is the truth and pretending
+   * otherwise would leave the user believing data was stored that was not.
+   */
+  const logMany = useCallback(
+    async (date: string, values: { metricId: string; value: number }[]): Promise<string | null> => {
+      if (values.length === 0) return null;
+
+      setEntries((prev) => {
+        const next = prev.slice();
+        for (const { metricId, value } of values) {
+          const idx = next.findIndex((e) => e.metricId === metricId && e.date === date);
+          if (idx === -1) next.push({ metricId, date, value });
+          else next[idx] = { ...next[idx], value };
+        }
+        return next;
+      });
+
+      try {
+        const results = await Promise.allSettled(
+          values.map(({ metricId, value }) =>
+            fetchJson<Entry>('/api/entries', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ metricId, value, date }),
+            }),
+          ),
+        );
+        const failed = results.filter((r) => r.status === 'rejected').length;
+        if (failed > 0) {
+          const msg = `Saved ${values.length - failed} of ${values.length} — ${failed} failed.`;
+          setActionError(msg);
+          return msg;
+        }
+        setActionError(null);
+        return null;
+      } finally {
+        await refresh();
+      }
+    },
+    [refresh],
+  );
+
   /** Toggle a metric active/inactive: optimistic, PATCH, then refresh. */
   const setMetricActive = useCallback(
     async (id: string, active: boolean) => {
@@ -204,6 +252,7 @@ export function useDashboard() {
     actionError,
     refresh,
     logEntry,
+    logMany,
     setMetricActive,
     addMetric,
     editMetric,

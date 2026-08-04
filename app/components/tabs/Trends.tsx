@@ -6,6 +6,7 @@ import { lastNDates } from '@/lib/dates';
 import { topCorrelations } from '@/lib/correlations';
 import { seriesFor, valueMap } from '../data';
 import LineChart from '../LineChart';
+import InsightSummary from '../InsightSummary';
 
 export default function Trends({
   metrics,
@@ -27,6 +28,8 @@ export default function Trends({
 
   return (
     <div className="space-y-3">
+      <InsightSummary metrics={metrics} entries={entries} today={today} />
+
       {active.map((m) => {
         const map = valueMap(entries, m.id);
         const points = dates30.map((d) => ({ date: d, value: map.get(d) ?? null }));

@@ -170,7 +170,11 @@ export default function HealthConnector({ refresh }: { refresh: () => Promise<vo
             </button>
           </div>
           <p className="mt-1 text-[10.5px] text-[color:var(--faint)]">
-            On your phone, use your PC’s IP instead of localhost — see README.
+            {/* Deployed, this URL works from anywhere. Served from localhost it
+                only resolves on this machine, and the Shortcut needs the LAN IP. */}
+            {origin.includes('localhost') || origin.includes('127.0.0.1')
+              ? 'On your phone, use your PC’s IP instead of localhost — see README.'
+              : 'Paste this straight into the Shortcut — it works on cellular, no Wi-Fi needed.'}
           </p>
         </div>
 

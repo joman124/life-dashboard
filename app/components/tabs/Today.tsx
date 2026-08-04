@@ -14,12 +14,14 @@ export default function Today({
   timeline,
   today,
   onLog,
+  onSaveAll,
 }: {
   metrics: Metric[];
   entries: Entry[];
   timeline: TimelineItem[];
   today: string;
   onLog: (metricId: string, value: number, date: string) => void;
+  onSaveAll: (date: string, values: { metricId: string; value: number }[]) => Promise<string | null>;
 }) {
   const active = metrics.filter((m) => m.active);
   const insight = topCorrelations(
@@ -41,7 +43,13 @@ export default function Today({
         </section>
       )}
       {insight && <InsightCard pair={insight} metrics={metrics} />}
-      <LogEntries metrics={active} entries={entries} today={today} onLog={onLog} />
+      <LogEntries
+        metrics={active}
+        entries={entries}
+        today={today}
+        onLog={onLog}
+        onSaveAll={onSaveAll}
+      />
       <Timeline items={timeline} />
     </div>
   );

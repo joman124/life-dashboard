@@ -227,6 +227,7 @@ export default function Page() {
             timeline={dash.timeline}
             today={today}
             onLog={(metricId, value, date) => void dash.logEntry(metricId, value, date)}
+            onSaveAll={dash.logMany}
           />
         ) : tab === 'week' ? (
           <Week metrics={dash.metrics} entries={dash.entries} today={today} />

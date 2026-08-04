@@ -27,6 +27,10 @@ On the very first run, Life Dashboard seeds 30 days of realistic sample data aut
 
 **Logging.** The Today tab has a stepper for each active metric. Above them is a strip of the last seven days — tap any day to log or correct it, so forgetting to open the app on Tuesday doesn't cost you Tuesday. A dot under a day means it already has at least one entry, which makes gaps in the week obvious at a glance. Streaks are forgiving about *today* specifically: an unlogged today doesn't break a run, but a logged miss does.
 
+**Steppers or form.** The log card has a **Steppers / Form** toggle. Steppers suit nudging deep work by half an hour; the form suits typing `9336` steps or `2.4` hours of screen time. The form arrives **pre-filled** with whatever that day already holds — a Shortcut import, a Google Calendar sync, or an earlier manual entry — so it is a correction pass over what synced, not a blank slate. Leave a field empty to leave that day untouched, then **Save all** writes everything in one go.
+
+**Reading the trends.** The Trends tab opens with a written summary — the strongest correlation, the biggest mover versus last week, how many goals your 7-day average is meeting, your longest current streak, and any metric logged too rarely to be trusted. It is plain arithmetic over your own entries, not a model, so the same data always produces the same words.
+
 **Changing what you track.** Track → each metric row has **Edit** (emoji, name, goal, direction) and, inside that, **Delete**. The distinction matters:
 
 - The **switch** stops tracking a metric but keeps all of its history. This is what you want almost always.
@@ -197,21 +201,19 @@ Apple HealthKit has no cloud API — health data never leaves your iPhone unless
 1. In the app, go to **⚙ Track → Connectors → Apple Health**.
 2. Copy the **bearer token** and the **import URL** shown there. You'll paste both into the Shortcut below.
 
-### Networking note (important)
+### Networking note
 
-The Shortcut runs on your iPhone, not on the PC — so `http://localhost:3000` won't work; "localhost" on the phone means the phone itself, which isn't running a server. Your phone needs to reach your PC over Wi-Fi instead:
+**Against the deployed app, there is nothing to configure.** The URL shown in the Connectors panel is a public HTTPS address, so the Shortcut works from anywhere — on cellular, away from home, with your PC switched off. Copy it and skip to the next section.
 
-1. Make sure your iPhone and your PC are on the **same Wi-Fi network**.
-2. Start the server with `npm run dev:lan` instead of `npm run dev` — this binds the dev server to all network interfaces instead of just `localhost`, so other devices on the network can reach it.
-3. Find your PC's local IP address. Open PowerShell or Command Prompt and run:
-   ```
-   ipconfig
-   ```
-   Look for the **IPv4 Address** under your active adapter (Wi-Fi or Ethernet) — something like `192.168.1.42`.
-4. Your Shortcut's URL will be `http://<PC-IP>:3000/api/health-import` — for example, `http://192.168.1.42:3000/api/health-import`.
-5. If the Shortcut can't connect, allow Node.js through **Windows Defender Firewall** for **Private networks** (Windows will usually prompt for this the first time the dev server accepts an outside connection — accept it).
+The rest of this only applies when you point the Shortcut at a dev server on your PC. The Shortcut runs on your iPhone, so `http://localhost:3000` won't work — "localhost" on the phone means the phone:
 
-If you'd rather skip networking setup entirely, the [manual paste fallback](#manual-paste-fallback) below works without any of this — it just requires you to open the Health app and copy numbers in yourself.
+1. Put your iPhone and your PC on the **same Wi-Fi network**.
+2. Start the server with `npm run dev:lan` instead of `npm run dev`, which binds to all interfaces rather than just `localhost`.
+3. Find your PC's IPv4 address with `ipconfig` — something like `192.168.1.42`.
+4. The Shortcut's URL is then `http://<PC-IP>:3000/api/health-import`.
+5. If it can't connect, allow Node.js through **Windows Defender Firewall** for **Private networks**.
+
+The [manual paste fallback](#manual-paste-fallback) works without any of this.
 
 ### Build the Shortcut
 
@@ -264,6 +266,23 @@ You don't need the Shortcut (or even an iPhone) to use this connector. In **⚙ 
 ```
 
 and click **Import**. This is the fastest way to test the payload format, or to log a one-off day without setting up networking at all.
+
+## Screen Time, and what cannot be automated
+
+**Screen Time has no API.** Not a REST endpoint, not a HealthKit sample type, not a Shortcuts action. Apple exposes it only through the `DeviceActivity` and `FamilyControls` frameworks, which are available to native iOS apps, run inside a privacy sandbox that forbids sending the numbers off-device, and are unreachable from a web app or a Shortcut. No amount of work on this dashboard changes that.
+
+**Apple Health cannot be read by a web page either.** HealthKit is on-device only. Mobile Safari has no access to it under any circumstance. The iOS Shortcut exists precisely because it is the one sanctioned way to get HealthKit data out — the Shortcut reads Health locally and *pushes* to the webhook. Nothing pulls.
+
+So the split is:
+
+| Source | How it gets in |
+|---|---|
+| Google Calendar / Gmail | Real OAuth sync, fully automatic, works from the phone browser |
+| Apple Health (steps, sleep) | iOS Shortcut pushes to the webhook on a morning schedule |
+| Screen Time | Manual — read it off the phone, type it into the form |
+| Oura / Whoop / Fitbit | Not built, but these have real cloud APIs and would be proper connectors |
+
+A **Screen Time** metric (📱, goal ≤ 3h/day) is set up for you. Because it is manual, the quickest route is the **Form** toggle on the Today tab: open Settings → Screen Time on your phone, read the daily average, and type it in alongside everything else. The seven-day strip means you can backfill a few days at once on a Sunday rather than remembering nightly.
 
 ## Troubleshooting
 
