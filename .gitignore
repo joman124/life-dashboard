@@ -12,3 +12,6 @@ HANDOFF.md
 *.tsbuildinfo
 
 .vercel
+
+# Contains the live Apple Health bearer token - never commit
+APPLE-HEALTH-SETUP.md
