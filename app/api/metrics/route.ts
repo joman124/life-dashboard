@@ -6,13 +6,15 @@ import { NextResponse } from 'next/server';
 import { createMetric, getMetricById, listMetrics } from '@/lib/db';
 import { jsonError, toErrorMessage } from '@/lib/http';
 import {
-  DEFAULT_MAX,
-  DEFAULT_STEP,
+  MAX_UNIT_LENGTH,
   isCategory,
   isFiniteNumber,
   isGoalDirection,
   isUnit,
+  maxFor,
+  normalizeUnit,
   slugify,
+  stepFor,
 } from '@/lib/validate';
 import { autoEmoji } from '@/lib/autoEmoji';
 import type { Metric } from '@/lib/types';
@@ -46,8 +48,13 @@ export async function POST(req: Request) {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) return jsonError('"name" is required and must be a non-empty string.', 400);
 
-    const unit = body.unit;
-    if (!isUnit(unit)) return jsonError('"unit" must be one of: h, m, count, /10.', 400);
+    if (!isUnit(body.unit)) {
+      return jsonError(
+        `"unit" must be a non-empty label of at most ${MAX_UNIT_LENGTH} characters — a builtin (h, m, count, /10) or your own (e.g. "pages").`,
+        400,
+      );
+    }
+    const unit = normalizeUnit(body.unit);
 
     const goal = body.goal;
     if (!isFiniteNumber(goal)) return jsonError('"goal" must be a finite number.', 400);
@@ -80,8 +87,8 @@ export async function POST(req: Request) {
       unit,
       goal,
       goalDirection,
-      step: body.step !== undefined ? (body.step as number) : DEFAULT_STEP[unit],
-      max: body.max !== undefined ? (body.max as number) : DEFAULT_MAX[unit],
+      step: body.step !== undefined ? (body.step as number) : stepFor(unit),
+      max: body.max !== undefined ? (body.max as number) : maxFor(unit),
       active: true,
       category: body.category !== undefined ? (body.category as Metric['category']) : 'CUSTOM',
       description: body.description !== undefined ? (body.description as string) : '',

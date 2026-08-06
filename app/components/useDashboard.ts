@@ -8,6 +8,9 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Entry, Metric, TimelineItem } from '@/lib/types';
 import { todayISO } from '@/lib/dates';
 
+/** Matches the `days` ceiling enforced by GET /api/entries. */
+const MAX_ENTRY_DAYS = 3650;
+
 export interface SyncState {
   lastGoogleSync: string | null;
   todayInboxCount: number | null;
@@ -27,6 +30,7 @@ export interface MetricPatchInput {
   emoji?: string;
   goal?: number;
   goalDirection?: Metric['goalDirection'];
+  unit?: Metric['unit'];
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -62,7 +66,11 @@ export function useDashboard() {
     try {
       const [m, e, t, s] = await Promise.all([
         fetchJson<Metric[]>('/api/metrics'),
-        fetchJson<Entry[]>('/api/entries?days=31'),
+        // The Trends tab can ask for up to all-time, so the whole history is
+        // fetched once rather than re-fetching per range change. This is a
+        // single-user dashboard: a decade of daily entries across a handful of
+        // metrics is a few thousand rows, far cheaper than the round trip.
+        fetchJson<Entry[]>(`/api/entries?days=${MAX_ENTRY_DAYS}`),
         fetchJson<TimelineItem[]>(`/api/timeline?date=${todayISO()}`),
         fetchJson<SyncState>('/api/sync-state'),
       ]);

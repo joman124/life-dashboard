@@ -142,8 +142,23 @@ describe('parseImport — metric validation', () => {
     expect(errorOf(payload({ metrics: [metric({ emoji: '' })] }))).toMatch(/metrics\[0\]\.emoji/);
   });
 
-  test('rejects an unknown unit', () => {
-    expect(errorOf(payload({ metrics: [metric({ unit: 'kg' })] }))).toMatch(/metrics\[0\]\.unit/);
+  test('accepts a custom unit label', () => {
+    // Custom units are first-class, so "kg" is a legitimate unit to restore.
+    expect(parseImport(payload({ metrics: [metric({ unit: 'kg' })] })).ok).toBe(true);
+  });
+
+  test('rejects an empty unit', () => {
+    expect(errorOf(payload({ metrics: [metric({ unit: '' })] }))).toMatch(/metrics\[0\]\.unit/);
+  });
+
+  test('rejects an over-long unit label', () => {
+    expect(errorOf(payload({ metrics: [metric({ unit: 'a'.repeat(40) })] }))).toMatch(
+      /metrics\[0\]\.unit/,
+    );
+  });
+
+  test('rejects a non-string unit', () => {
+    expect(errorOf(payload({ metrics: [metric({ unit: 7 })] }))).toMatch(/metrics\[0\]\.unit/);
   });
 
   test('rejects an unknown category', () => {
@@ -185,7 +200,7 @@ describe('parseImport — metric validation', () => {
 
   test('names the offending row index', () => {
     const good = metric();
-    const bad = metric({ id: 'steps', unit: 'kg' });
+    const bad = metric({ id: 'steps', unit: '' });
     expect(errorOf(payload({ metrics: [good, bad] }))).toMatch(/metrics\[1\]\.unit/);
   });
 });
@@ -279,8 +294,9 @@ describe('parseImport — purity', () => {
   });
 
   test('rejects rather than repairing bad data', () => {
-    // Import must never guess. A wrong unit is a rejection, not a coercion.
-    const result = parseImport(payload({ metrics: [metric({ unit: 'hours' })] }));
+    // Import must never guess. A malformed unit is a rejection, not a coercion
+    // to some nearby default.
+    const result = parseImport(payload({ metrics: [metric({ unit: '   ' })] }));
     expect(result.ok).toBe(false);
   });
 });

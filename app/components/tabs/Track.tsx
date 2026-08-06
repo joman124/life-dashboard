@@ -11,13 +11,7 @@ import type { MetricPatchInput, NewMetricInput } from '../useDashboard';
 import ConnectorPanel from '../ConnectorPanel';
 import DataPanel from '../DataPanel';
 import MetricSettingsRow from '../MetricSettingsRow';
-
-const UNIT_OPTIONS: { value: Metric['unit']; label: string }[] = [
-  { value: 'h', label: 'hours' },
-  { value: 'm', label: 'minutes' },
-  { value: 'count', label: 'count' },
-  { value: '/10', label: 'score /10' },
-];
+import UnitField from '../UnitField';
 
 export default function Track({
   metrics,
@@ -44,7 +38,11 @@ export default function Track({
 
   const goalNum = Number(goal);
   const canAdd =
-    name.trim().length > 0 && goal.trim() !== '' && Number.isFinite(goalNum) && !submitting;
+    name.trim().length > 0 &&
+    unit.trim().length > 0 &&
+    goal.trim() !== '' &&
+    Number.isFinite(goalNum) &&
+    !submitting;
   const previewEmoji = emojiOverride.trim() || (name.trim() ? autoEmoji(name) : '');
 
   async function handleAdd() {
@@ -53,7 +51,7 @@ export default function Track({
     setFormError(null);
     const err = await onAdd({
       name: name.trim(),
-      unit,
+      unit: unit.trim(),
       goal: goalNum,
       goalDirection: dir,
       ...(emojiOverride.trim() ? { emoji: emojiOverride.trim() } : {}),
@@ -117,21 +115,8 @@ export default function Track({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block">
-              <span className="eyebrow block !text-[9.5px]">Unit</span>
-              <select
-                className="input mt-1"
-                value={unit}
-                onChange={(e) => setUnit(e.target.value as Metric['unit'])}
-              >
-                {UNIT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className="grid grid-cols-2 items-start gap-2">
+            <UnitField value={unit} onChange={setUnit} idPrefix="add" />
             <label className="block">
               <span className="eyebrow block !text-[9.5px]">Direction</span>
               <select

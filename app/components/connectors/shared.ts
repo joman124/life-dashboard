@@ -4,6 +4,8 @@
 // string, falling back to the HTTP status rather than a generic "something went
 // wrong", so the panels can surface the server's real message verbatim.
 
+import { formatClock, formatDateShort, todayISO } from '@/lib/dates';
+
 /** Read a JSON {error} body, falling back to the HTTP status line. */
 export async function readError(res: Response): Promise<string> {
   try {
@@ -20,15 +22,21 @@ export function errorText(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
-/** "Synced 2:14 PM" / "Synced Jun 21, 2:14 PM" / "Never synced". */
+/**
+ * "Synced 14:14" / "Synced Jun 21, 14:14" / "Never synced".
+ *
+ * Rendered in the dashboard timezone, not the viewer's: every other timestamp
+ * on the page is UTC-7, and a sync time that silently disagreed with the day it
+ * is being compared against is worse than no timestamp.
+ */
 export function humanizeSync(iso: string | null): string {
   if (!iso) return 'Never synced';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return 'Never synced';
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  const sameDay = d.toDateString() === new Date().toDateString();
-  if (sameDay) return `Synced ${time}`;
-  return `Synced ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${time}`;
+  const clock = formatClock(d);
+  const day = todayISO(d);
+  if (day === todayISO()) return `Synced ${clock}`;
+  return `Synced ${formatDateShort(day)}, ${clock}`;
 }
 
 export const PRIMARY_BTN = 'w-full rounded-xl py-2.5 text-[14px] font-semibold disabled:opacity-40';

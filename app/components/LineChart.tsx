@@ -1,7 +1,9 @@
 'use client';
 
-// LineChart — 30-day trend line: gold 2px line on the card, dashed hairline
-// grid, and a dark tooltip (value + date) that follows hover/touch.
+// LineChart — trend line over an arbitrary window: gold 2px line on the card,
+// dashed hairline grid, and a dark tooltip (value + date) that follows
+// hover/touch. The window is whatever the caller passes in `points`, so the
+// same component draws 30 days and 12 months.
 
 import { useRef, useState } from 'react';
 import type { Unit } from '@/lib/types';
@@ -23,10 +25,12 @@ export default function LineChart({
   points,
   unit,
   label,
+  emptyLabel = 'No data in this range',
 }: {
   points: LinePoint[];
   unit: Unit;
   label: string;
+  emptyLabel?: string;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
@@ -158,7 +162,7 @@ export default function LineChart({
       </svg>
       {loggedVals.length === 0 && (
         <p className="pointer-events-none absolute inset-0 grid place-items-center text-[12px] text-[color:var(--faint)]">
-          No data in the last 30 days
+          {emptyLabel}
         </p>
       )}
       {active && (

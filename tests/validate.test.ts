@@ -3,11 +3,16 @@ import {
   DEFAULT_MAX,
   DEFAULT_STEP,
   ISO_DATE_RE,
+  MAX_UNIT_LENGTH,
+  isBuiltinUnit,
   isCategory,
   isFiniteNumber,
   isGoalDirection,
   isUnit,
+  maxFor,
+  normalizeUnit,
   slugify,
+  stepFor,
 } from '@/lib/validate';
 
 describe('ISO_DATE_RE', () => {
@@ -23,16 +28,76 @@ describe('ISO_DATE_RE', () => {
 });
 
 describe('isUnit', () => {
-  test('accepts every supported unit', () => {
+  test('accepts every builtin unit', () => {
     for (const unit of ['h', 'm', 'count', '/10']) {
       expect(isUnit(unit), `"${unit}" should be a unit`).toBe(true);
     }
   });
 
-  test('rejects unknown or non-string values', () => {
-    for (const bad of ['hours', 'H', '', 'kg', 1, null, undefined, {}, ['h']]) {
+  test('accepts custom labels', () => {
+    for (const unit of ['pages', 'reps', 'miles', '$', 'fl oz', 'glasses']) {
+      expect(isUnit(unit), `"${unit}" should be accepted`).toBe(true);
+    }
+  });
+
+  test('rejects empty and whitespace-only labels', () => {
+    for (const bad of ['', '   ', '\t']) {
       expect(isUnit(bad)).toBe(false);
     }
+  });
+
+  test('rejects labels longer than the display budget', () => {
+    expect(isUnit('a'.repeat(MAX_UNIT_LENGTH))).toBe(true);
+    expect(isUnit('a'.repeat(MAX_UNIT_LENGTH + 1))).toBe(false);
+  });
+
+  test('rejects labels containing line breaks or tabs', () => {
+    // These are rendered inline next to the value; a break wrecks every card.
+    for (const bad of ['pa\nges', 'pa\tges', 'pa\rges']) {
+      expect(isUnit(bad)).toBe(false);
+    }
+  });
+
+  test('rejects non-string values', () => {
+    for (const bad of [1, null, undefined, {}, ['h'], true]) {
+      expect(isUnit(bad)).toBe(false);
+    }
+  });
+});
+
+describe('isBuiltinUnit', () => {
+  test('separates builtins from custom labels', () => {
+    expect(isBuiltinUnit('h')).toBe(true);
+    expect(isBuiltinUnit('/10')).toBe(true);
+    expect(isBuiltinUnit('pages')).toBe(false);
+    expect(isBuiltinUnit('hours')).toBe(false);
+  });
+});
+
+describe('normalizeUnit', () => {
+  test('trims surrounding whitespace', () => {
+    expect(normalizeUnit('  pages  ')).toBe('pages');
+  });
+
+  test('leaves internal spacing alone', () => {
+    expect(normalizeUnit(' fl oz ')).toBe('fl oz');
+  });
+});
+
+describe('stepFor / maxFor', () => {
+  test('use the builtin defaults for builtin units', () => {
+    expect(stepFor('h')).toBe(DEFAULT_STEP.h);
+    expect(maxFor('/10')).toBe(DEFAULT_MAX['/10']);
+  });
+
+  test('give custom units whole-number steps', () => {
+    // 0.5 is a sane nudge for hours and nonsense for pages.
+    expect(stepFor('pages')).toBe(1);
+    expect(maxFor('pages')).toBeGreaterThan(0);
+  });
+
+  test('keep max reachable in whole steps for custom units', () => {
+    expect(Number.isInteger(maxFor('pages') / stepFor('pages'))).toBe(true);
   });
 });
 

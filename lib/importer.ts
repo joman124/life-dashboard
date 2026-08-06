@@ -10,7 +10,17 @@
  */
 
 import type { Entry, Metric } from './types';
-import { CATEGORIES, ISO_DATE_RE, UNITS, isCategory, isFiniteNumber, isGoalDirection, isUnit } from './validate';
+import {
+  CATEGORIES,
+  ISO_DATE_RE,
+  MAX_UNIT_LENGTH,
+  UNITS,
+  isCategory,
+  isFiniteNumber,
+  isGoalDirection,
+  isUnit,
+  normalizeUnit,
+} from './validate';
 
 export interface ImportPayload {
   metrics: Metric[];
@@ -64,7 +74,11 @@ export function parseImport(raw: unknown): ParseResult {
     const emoji = typeof m.emoji === 'string' ? m.emoji.trim() : '';
     if (!emoji) return fail(`${at}.emoji must be a non-empty string.`);
 
-    if (!isUnit(m.unit)) return fail(`${at}.unit must be one of: ${UNITS.join(', ')}.`);
+    if (!isUnit(m.unit)) {
+      return fail(
+        `${at}.unit must be a non-empty label of at most ${MAX_UNIT_LENGTH} characters — a builtin (${UNITS.join(', ')}) or a custom one.`,
+      );
+    }
     if (!isFiniteNumber(m.goal)) return fail(`${at}.goal must be a finite number.`);
     if (!isGoalDirection(m.goalDirection)) return fail(`${at}.goalDirection must be ">=" or "<=".`);
     if (!isFiniteNumber(m.step) || m.step <= 0) return fail(`${at}.step must be a positive number.`);
@@ -79,7 +93,7 @@ export function parseImport(raw: unknown): ParseResult {
       id,
       name,
       emoji,
-      unit: m.unit,
+      unit: normalizeUnit(m.unit),
       goal: m.goal,
       goalDirection: m.goalDirection,
       step: m.step,

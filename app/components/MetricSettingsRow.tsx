@@ -13,6 +13,7 @@ import type { Entry, Metric } from '@/lib/types';
 import type { MetricPatchInput } from './useDashboard';
 import { autoEmoji } from '@/lib/autoEmoji';
 import { formatGoal } from './format';
+import UnitField from './UnitField';
 
 type Mode = 'view' | 'edit' | 'confirm-delete';
 
@@ -32,11 +33,17 @@ export default function MetricSettingsRow({
   const [emoji, setEmoji] = useState(metric.emoji);
   const [goal, setGoal] = useState(String(metric.goal));
   const [dir, setDir] = useState<Metric['goalDirection']>(metric.goalDirection);
+  const [unit, setUnit] = useState<Metric['unit']>(metric.unit);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const goalNum = Number(goal);
-  const canSave = name.trim() !== '' && goal.trim() !== '' && Number.isFinite(goalNum) && !busy;
+  const canSave =
+    name.trim() !== '' &&
+    unit.trim() !== '' &&
+    goal.trim() !== '' &&
+    Number.isFinite(goalNum) &&
+    !busy;
 
   /** Reset the form back to the metric's stored values and return to view. */
   function cancel() {
@@ -44,6 +51,7 @@ export default function MetricSettingsRow({
     setEmoji(metric.emoji);
     setGoal(String(metric.goal));
     setDir(metric.goalDirection);
+    setUnit(metric.unit);
     setError(null);
     setMode('view');
   }
@@ -59,6 +67,7 @@ export default function MetricSettingsRow({
     if (emoji.trim() && emoji.trim() !== metric.emoji) patch.emoji = emoji.trim();
     if (goalNum !== metric.goal) patch.goal = goalNum;
     if (dir !== metric.goalDirection) patch.goalDirection = dir;
+    if (unit.trim() !== metric.unit) patch.unit = unit.trim();
 
     if (Object.keys(patch).length === 0) {
       setBusy(false);
@@ -155,7 +164,8 @@ export default function MetricSettingsRow({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 items-start gap-2">
+          <UnitField value={unit} onChange={setUnit} idPrefix={`edit-${metric.id}`} />
           <label className="block">
             <span className="eyebrow block !text-[9.5px]">Direction</span>
             <select
@@ -168,20 +178,21 @@ export default function MetricSettingsRow({
               <option value="<=">at most</option>
             </select>
           </label>
-          <label className="block">
-            <span className="eyebrow block !text-[9.5px]">Goal</span>
-            <input
-              className="input mt-1"
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="any"
-              value={goal}
-              onChange={(e) => setGoal(e.target.value)}
-              aria-label="Goal"
-            />
-          </label>
         </div>
+
+        <label className="block">
+          <span className="eyebrow block !text-[9.5px]">Goal</span>
+          <input
+            className="input mt-1"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="any"
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
+            aria-label="Goal"
+          />
+        </label>
 
         <div className="flex flex-wrap items-center gap-2">
           <button

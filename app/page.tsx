@@ -5,9 +5,8 @@
 // the useDashboard hook; tab state lives in React state.
 
 import { useEffect, useState } from 'react';
-import { formatDateLong, todayISO } from '@/lib/dates';
+import { formatDateLong, hourOfDay, isoWeek, todayISO } from '@/lib/dates';
 import { useDashboard } from './components/useDashboard';
-import { weeklyScore } from './components/data';
 import Today from './components/tabs/Today';
 import Week from './components/tabs/Week';
 import Trends from './components/tabs/Trends';
@@ -24,9 +23,17 @@ const TABS: { id: TabId; label: string; name: string }[] = [
   { id: 'track', label: '⚙', name: 'Track' },
 ];
 
+/**
+ * Time-of-day greeting, resolved in the dashboard timezone (UTC-7).
+ *
+ * It reads the same clock on the server and in the browser, which is the whole
+ * point: this used to call getHours() on whichever machine ran it, so the
+ * server rendered a UTC greeting, hydration was told to leave the mismatch
+ * alone, and the wrong half of the day stuck on screen.
+ */
 function greeting(): string {
-  const h = new Date().getHours();
-  const part = h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening';
+  const h = hourOfDay();
+  const part = h < 12 ? 'morning' : h < 17 ? 'afternoon' : h < 21 ? 'evening' : 'night';
   const name = (process.env.NEXT_PUBLIC_USER_NAME ?? '').trim();
   return `Good ${part}${name ? `, ${name}` : ''}.`;
 }
@@ -81,7 +88,7 @@ export default function Page() {
   }, [banner]);
 
   const today = todayISO();
-  const score = weeklyScore(dash.metrics, dash.entries, today);
+  const week = isoWeek(today);
   const inbox = dash.syncState.todayInboxCount;
   const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0];
 
@@ -89,13 +96,12 @@ export default function Page() {
     <div className="mx-auto min-h-screen max-w-[480px]">
       <header className="flex items-start justify-between gap-3 px-4 pb-4 pt-6">
         <div className="min-w-0">
-          <h1 className="font-display text-[22px] leading-tight" suppressHydrationWarning>
-            {greeting()}
-          </h1>
+          {/* No suppressHydrationWarning: both of these now resolve through the
+              fixed UTC-7 clock, so the server and the browser render the same
+              string and there is no mismatch left to suppress. */}
+          <h1 className="font-display text-[22px] leading-tight">{greeting()}</h1>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <p className="text-[13px] text-[color:var(--muted)]" suppressHydrationWarning>
-              {formatDateLong(today)}
-            </p>
+            <p className="text-[13px] text-[color:var(--muted)]">{formatDateLong(today)}</p>
             <span
               className="rounded-full border px-2 py-px text-[10.5px]"
               style={{ borderColor: 'var(--hairline)', color: 'var(--faint)' }}
@@ -105,13 +111,19 @@ export default function Page() {
             </span>
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-center gap-1" title="Weekly score">
+        {/* ISO-8601 week of the year — weeks run Mon–Sun and week 1 is the one
+            containing the year's first Thursday. The weekly SCORE this badge
+            used to show lives on the Week tab and at the head of Trends. */}
+        <div
+          className="flex shrink-0 flex-col items-center gap-1"
+          title={`ISO week ${week} of ${today.slice(0, 4)}`}
+        >
           <div
             className="grid h-12 w-12 place-items-center rounded-full border"
             style={{ borderColor: 'var(--gold-dim)' }}
           >
             <span className="font-display text-[17px]" style={{ color: 'var(--gold)' }}>
-              {dash.loading ? '–' : score}
+              {week}
             </span>
           </div>
           <span className="text-[9.5px] uppercase tracking-[0.14em] text-[color:var(--faint)]">
@@ -226,8 +238,11 @@ export default function Page() {
             entries={dash.entries}
             timeline={dash.timeline}
             today={today}
+            lastGoogleSync={dash.syncState.lastGoogleSync}
+            inboxCount={dash.syncState.todayInboxCount}
             onLog={(metricId, value, date) => void dash.logEntry(metricId, value, date)}
             onSaveAll={dash.logMany}
+            refresh={dash.refresh}
           />
         ) : tab === 'week' ? (
           <Week metrics={dash.metrics} entries={dash.entries} today={today} />

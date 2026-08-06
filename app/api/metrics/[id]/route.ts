@@ -14,7 +14,16 @@ import {
   type MetricPatch,
 } from '@/lib/db';
 import { jsonError, toErrorMessage } from '@/lib/http';
-import { isCategory, isFiniteNumber, isGoalDirection, isUnit } from '@/lib/validate';
+import {
+  MAX_UNIT_LENGTH,
+  isCategory,
+  isFiniteNumber,
+  isGoalDirection,
+  isUnit,
+  maxFor,
+  normalizeUnit,
+  stepFor,
+} from '@/lib/validate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -55,8 +64,19 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       patch.emoji = emoji;
     }
     if (body.unit !== undefined) {
-      if (!isUnit(body.unit)) return jsonError('"unit" must be one of: h, m, count, /10.', 400);
-      patch.unit = body.unit;
+      if (!isUnit(body.unit)) {
+        return jsonError(
+          `"unit" must be a non-empty label of at most ${MAX_UNIT_LENGTH} characters — a builtin (h, m, count, /10) or your own (e.g. "pages").`,
+          400,
+        );
+      }
+      patch.unit = normalizeUnit(body.unit);
+      // Step and max are unit-derived: 0.5 is a sane nudge for hours and a
+      // nonsense one for pages. Re-derive them unless this same request is
+      // setting them explicitly, so changing the unit can't strand the stepper
+      // on increments that belong to the old one.
+      if (body.step === undefined) patch.step = stepFor(patch.unit);
+      if (body.max === undefined) patch.max = maxFor(patch.unit);
     }
     if (body.step !== undefined) {
       if (!isFiniteNumber(body.step) || body.step <= 0) return jsonError('"step" must be a positive number.', 400);

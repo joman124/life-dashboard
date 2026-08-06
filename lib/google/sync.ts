@@ -12,7 +12,7 @@
  */
 import { google } from 'googleapis';
 import type { Auth } from 'googleapis';
-import { todayISO } from '@/lib/dates';
+import { endOfDay, formatClock, startOfDay, todayISO } from '@/lib/dates';
 import {
   replaceCalendarTimeline,
   setSyncValue,
@@ -34,16 +34,6 @@ export interface SyncResult {
 const DEEP_WORK_RE = /deep work|focus|writing|build/i;
 
 /* --------------------------------------------------------------- formatting */
-
-function pad2(n: number): string {
-  return n < 10 ? `0${n}` : String(n);
-}
-
-/** Local HH:MM from an RFC3339 dateTime string. */
-function localHHMM(dateTime: string): string {
-  const d = new Date(dateTime);
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
 
 /** Humanize a duration in minutes: "1h 30m", "2h", "45m", "0m". */
 function humanizeDuration(minutes: number): string {
@@ -85,17 +75,14 @@ interface CalendarOutcome {
 async function syncCalendar(auth: Auth.OAuth2Client, today: string): Promise<CalendarOutcome> {
   const calendar = google.calendar({ version: 'v3', auth });
 
-  // Local start/end of today as RFC3339 WITH the machine's local offset, so the
-  // window matches the user's calendar day regardless of timezone.
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-
+  // The query window is the dashboard timezone's calendar day, expressed as
+  // true UTC instants. Deriving it from the host clock (setHours) would ask
+  // Google for the wrong 24 hours whenever the server runs in UTC, which is
+  // exactly what Vercel does.
   const res = await calendar.events.list({
     calendarId: 'primary',
-    timeMin: start.toISOString(),
-    timeMax: end.toISOString(),
+    timeMin: startOfDay(today).toISOString(),
+    timeMax: endOfDay(today).toISOString(),
     singleEvents: true,
     orderBy: 'startTime',
     maxResults: 250,
@@ -120,7 +107,7 @@ async function syncCalendar(auth: Auth.OAuth2Client, today: string): Promise<Cal
       continue;
     }
 
-    const time = localHHMM(startDateTime);
+    const time = formatClock(startDateTime);
     let detail = '';
     if (endDateTime) {
       const durMin = (new Date(endDateTime).getTime() - new Date(startDateTime).getTime()) / 60000;

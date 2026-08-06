@@ -1,22 +1,133 @@
 import { describe, expect, test } from 'vitest';
-import { addDays, dayLabel, formatDateLong, lastNDates, todayISO } from '@/lib/dates';
+import {
+  addDays,
+  daysBetween,
+  dayLabel,
+  endOfDay,
+  formatClock,
+  formatDateLong,
+  hourOfDay,
+  isoWeek,
+  lastNDates,
+  startOfDay,
+  todayISO,
+} from '@/lib/dates';
 
 describe('todayISO', () => {
-  test('returns the local calendar date, not the UTC one', () => {
-    // Arrange: the local calendar fields of "now", assembled independently of
-    // the implementation. This is the assertion that actually matters — a naive
-    // toISOString() implementation reports the wrong day for anyone west of UTC
-    // in the evening (and east of UTC in the early morning).
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const expected = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  test('resolves the date in UTC-7, not UTC', () => {
+    // 02:30 UTC on Aug 6 is 19:30 on Aug 5 in UTC-7. Reporting Aug 6 here is
+    // the exact bug that filed an evening health import under tomorrow.
+    expect(todayISO(new Date('2026-08-06T02:30:00Z'))).toBe('2026-08-05');
+  });
 
-    // Act & Assert
-    expect(todayISO()).toBe(expected);
+  test('rolls to the next date at 07:00 UTC', () => {
+    expect(todayISO(new Date('2026-08-06T06:59:59Z'))).toBe('2026-08-05');
+    expect(todayISO(new Date('2026-08-06T07:00:00Z'))).toBe('2026-08-06');
+  });
+
+  test('does not shift for daylight saving — UTC-7 all year', () => {
+    // Mid-January and mid-July resolve with the same offset.
+    expect(todayISO(new Date('2026-01-15T07:00:00Z'))).toBe('2026-01-15');
+    expect(todayISO(new Date('2026-07-15T07:00:00Z'))).toBe('2026-07-15');
   });
 
   test('is formatted as YYYY-MM-DD', () => {
     expect(todayISO()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe('hourOfDay', () => {
+  test('returns the UTC-7 hour', () => {
+    // 02:30 UTC → 19:30 the previous evening in UTC-7.
+    expect(hourOfDay(new Date('2026-08-06T02:30:00Z'))).toBe(19);
+    expect(hourOfDay(new Date('2026-08-06T16:00:00Z'))).toBe(9);
+  });
+
+  test('covers the full 0–23 range across a day', () => {
+    const hours = Array.from({ length: 24 }, (_, h) =>
+      hourOfDay(new Date(Date.UTC(2026, 7, 6, h, 30))),
+    );
+    expect(new Set(hours).size).toBe(24);
+  });
+});
+
+describe('startOfDay / endOfDay', () => {
+  test('a UTC-7 calendar day begins at 07:00 UTC', () => {
+    expect(startOfDay('2026-08-05').toISOString()).toBe('2026-08-05T07:00:00.000Z');
+  });
+
+  test('spans exactly 24 hours', () => {
+    const ms = endOfDay('2026-08-05').getTime() - startOfDay('2026-08-05').getTime();
+    expect(ms).toBe(86_400_000);
+  });
+
+  test('round-trips through todayISO', () => {
+    // Any instant inside the window must report that same calendar date.
+    const start = startOfDay('2026-08-05');
+    const justBeforeEnd = new Date(endOfDay('2026-08-05').getTime() - 1);
+    expect(todayISO(start)).toBe('2026-08-05');
+    expect(todayISO(justBeforeEnd)).toBe('2026-08-05');
+  });
+});
+
+describe('formatClock', () => {
+  test('renders the UTC-7 wall clock', () => {
+    expect(formatClock('2026-08-06T02:30:00Z')).toBe('19:30');
+    expect(formatClock('2026-08-06T16:05:00Z')).toBe('09:05');
+  });
+
+  test('zero-pads both fields', () => {
+    expect(formatClock('2026-08-06T08:03:00Z')).toBe('01:03');
+  });
+});
+
+describe('isoWeek', () => {
+  test('numbers a mid-year week', () => {
+    // 2026-08-05 is a Wednesday in ISO week 32.
+    expect(isoWeek('2026-08-05')).toBe(32);
+  });
+
+  test('is stable across a single Monday–Sunday week', () => {
+    const week = lastNDates('2026-08-09', 7).map(isoWeek); // Mon 3rd → Sun 9th
+    expect(new Set(week).size).toBe(1);
+    expect(week[0]).toBe(32);
+  });
+
+  test('increments on Monday', () => {
+    expect(isoWeek('2026-08-09')).toBe(32); // Sunday
+    expect(isoWeek('2026-08-10')).toBe(33); // Monday
+  });
+
+  test('assigns early-January days to the prior year final week', () => {
+    // 2027-01-01 is a Friday, so it belongs to the last ISO week of 2026.
+    expect(isoWeek('2027-01-01')).toBe(53);
+    expect(isoWeek('2027-01-04')).toBe(1); // the following Monday starts week 1
+  });
+
+  test('never returns a week outside 1–53', () => {
+    for (const d of lastNDates('2026-12-31', 365)) {
+      const w = isoWeek(d);
+      expect(w).toBeGreaterThanOrEqual(1);
+      expect(w).toBeLessThanOrEqual(53);
+    }
+  });
+});
+
+describe('daysBetween', () => {
+  test('counts forward', () => {
+    expect(daysBetween('2026-08-01', '2026-08-05')).toBe(4);
+  });
+
+  test('is negative when the end precedes the start', () => {
+    expect(daysBetween('2026-08-05', '2026-08-01')).toBe(-4);
+  });
+
+  test('is zero for the same date', () => {
+    expect(daysBetween('2026-08-05', '2026-08-05')).toBe(0);
+  });
+
+  test('crosses a year boundary', () => {
+    expect(daysBetween('2026-01-01', '2027-01-01')).toBe(365);
   });
 });
 

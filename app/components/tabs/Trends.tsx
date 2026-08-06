@@ -1,12 +1,54 @@
-// Trends tab — 30-day line chart per active metric, then the correlations
-// card: "What actually moves what" (top 3 pairs by |r|, ≥ 8 shared days).
+'use client';
 
+// Trends tab — the written read first ("What actually moves what": the week's
+// verdict, its evidence, what to push on next, and the correlation table), then
+// one chart per active metric with a brief per-metric summary under it.
+//
+// The order is deliberate: the block that tells you what to DO sits above the
+// charts you would otherwise have to interpret yourself.
+//
+// A range selector drives everything on the tab at once — charts, correlations
+// and the per-metric summaries all read the same window.
+
+import { useState } from 'react';
 import type { Entry, Metric } from '@/lib/types';
-import { lastNDates } from '@/lib/dates';
-import { topCorrelations } from '@/lib/correlations';
-import { seriesFor, valueMap } from '../data';
+import { daysBetween, lastNDates } from '@/lib/dates';
+import { metricSummary } from '@/lib/insights';
+import { valueMap } from '../data';
 import LineChart from '../LineChart';
-import InsightSummary from '../InsightSummary';
+import WhatMovesWhat from '../WhatMovesWhat';
+
+interface Range {
+  key: string;
+  label: string;
+  /** null means "all time" — resolved from the earliest logged entry. */
+  days: number | null;
+}
+
+const RANGES: Range[] = [
+  { key: '30', label: '30d', days: 30 },
+  { key: '60', label: '60d', days: 60 },
+  { key: '90', label: '90d', days: 90 },
+  { key: '180', label: '6mo', days: 180 },
+  { key: '365', label: '12mo', days: 365 },
+  { key: 'all', label: 'All', days: null },
+];
+
+/** Longest window we will ever ask for, matching the entries API ceiling. */
+const MAX_DAYS = 3650;
+
+/**
+ * Days covered by "all time": from the earliest logged entry through today.
+ * Falls back to 30 when nothing is logged, so an empty dashboard still renders
+ * a sensible axis instead of a decade of blank.
+ */
+function allTimeDays(entries: Entry[], today: string): number {
+  if (entries.length === 0) return 30;
+  let earliest = entries[0].date;
+  for (const e of entries) if (e.date < earliest) earliest = e.date;
+  const span = daysBetween(earliest, today) + 1;
+  return Math.min(MAX_DAYS, Math.max(30, span));
+}
 
 export default function Trends({
   metrics,
@@ -17,31 +59,76 @@ export default function Trends({
   entries: Entry[];
   today: string;
 }) {
+  const [rangeKey, setRangeKey] = useState('30');
+
+  const range = RANGES.find((r) => r.key === rangeKey) ?? RANGES[0];
+  const days = range.days ?? allTimeDays(entries, today);
+  const rangeLabel = range.days === null ? `all time · ${days} days` : `last ${days} days`;
+
   const active = metrics.filter((m) => m.active);
-  const dates30 = lastNDates(today, 30);
-  const pairs = topCorrelations(
-    entries,
-    active.map((m) => m.id),
-    { today },
-  );
-  const byId = new Map(metrics.map((m) => [m.id, m]));
+  const dates = lastNDates(today, days);
 
   return (
     <div className="space-y-3">
-      <InsightSummary metrics={metrics} entries={entries} today={today} />
+      {/* Range selector — drives every card on this tab. */}
+      <div
+        role="group"
+        aria-label="Time range"
+        className="flex overflow-hidden rounded-xl border"
+        style={{ borderColor: 'var(--hairline)' }}
+      >
+        {RANGES.map((r) => {
+          const isActive = r.key === range.key;
+          return (
+            <button
+              key={r.key}
+              type="button"
+              onClick={() => setRangeKey(r.key)}
+              aria-pressed={isActive}
+              className="min-h-11 flex-1 text-[12px] font-medium"
+              style={{
+                background: isActive ? 'var(--card-inset)' : 'transparent',
+                color: isActive ? 'var(--gold)' : 'var(--muted)',
+              }}
+            >
+              {r.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <WhatMovesWhat
+        metrics={metrics}
+        entries={entries}
+        today={today}
+        days={days}
+        rangeLabel={rangeLabel}
+      />
 
       {active.map((m) => {
         const map = valueMap(entries, m.id);
-        const points = dates30.map((d) => ({ date: d, value: map.get(d) ?? null }));
+        const points = dates.map((d) => ({ date: d, value: map.get(d) ?? null }));
+        const summary = metricSummary(m, entries, today, days);
         return (
           <section key={m.id} className="card p-4">
             <span className="eyebrow">
-              {m.emoji} {m.name} · 30 days
+              {m.emoji} {m.name} · {rangeLabel}
             </span>
-            <LineChart points={points} unit={m.unit} label={`${m.name}, last 30 days`} />
+            <LineChart
+              points={points}
+              unit={m.unit}
+              label={`${m.name}, ${rangeLabel}`}
+              emptyLabel={`No ${m.name.toLowerCase()} logged in this range`}
+            />
+            {summary.text && (
+              <p className="mt-2 text-[12.5px] leading-relaxed text-[color:var(--muted)]">
+                {summary.text}
+              </p>
+            )}
           </section>
         );
       })}
+
       {active.length === 0 && (
         <section className="card p-4">
           <p className="text-[13px] text-[color:var(--muted)]">
@@ -49,60 +136,6 @@ export default function Trends({
           </p>
         </section>
       )}
-
-      <section className="card p-4">
-        <h2 className="font-display text-[20px]">What actually moves what</h2>
-        {pairs.length === 0 ? (
-          <p className="mt-2 text-[13px] text-[color:var(--muted)]">
-            Not enough overlapping data yet — log at least 8 days of two metrics.
-          </p>
-        ) : (
-          <div className="mt-1">
-            {pairs.map((p, i) => {
-              const a = byId.get(p.aId);
-              const b = byId.get(p.bId);
-              if (!a || !b) return null;
-              const absR = Math.abs(p.r);
-              return (
-                <div
-                  key={`${p.aId}-${p.bId}`}
-                  className="py-3"
-                  style={i > 0 ? { borderTop: '1px solid var(--hairline)' } : undefined}
-                >
-                  <div className="truncate text-[14px]">
-                    {a.emoji} {a.name} <span className="text-[color:var(--faint)]">→</span> {b.emoji}{' '}
-                    {b.name}
-                  </div>
-                  <div className="mt-0.5 text-[12px] text-[color:var(--muted)]">
-                    {p.strength} {p.positive ? 'positive' : 'negative'} · r = {absR.toFixed(2)}
-                  </div>
-                  <div
-                    className="relative mt-2 h-1.5 w-full rounded-full"
-                    style={{ background: 'var(--hairline)' }}
-                    aria-hidden="true"
-                  >
-                    <span
-                      className="absolute top-1/2 h-[9px] w-px -translate-y-1/2"
-                      style={{ left: '50%', background: 'var(--faint)' }}
-                    />
-                    <span
-                      className="absolute top-0 h-full rounded-full"
-                      style={{
-                        width: `${absR * 50}%`,
-                        left: p.positive ? '50%' : `${50 - absR * 50}%`,
-                        background: p.positive ? 'var(--green)' : 'var(--red)',
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        <p className="mt-2 text-[11px] text-[color:var(--faint)]">
-          Correlation ≠ causation. These are patterns in your own data.
-        </p>
-      </section>
     </div>
   );
 }
