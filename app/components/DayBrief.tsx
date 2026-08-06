@@ -10,7 +10,7 @@
 // number presented as current is the failure mode worth designing against.
 
 import { useState } from 'react';
-import type { TimelineItem } from '@/lib/types';
+import type { InboxMessage, TimelineItem } from '@/lib/types';
 import { todayISO } from '@/lib/dates';
 import { errorText, humanizeSync, readError } from './connectors/shared';
 
@@ -47,9 +47,13 @@ function describeCalendar(items: TimelineItem[]): { shape: CalendarShape; text: 
   return { shape, text: `${parts.join(' · ')}.` };
 }
 
-function describeInbox(count: number | null): string {
+function describeInbox(count: number | null, shown: number): string {
   if (count === null) return 'Inbox count not synced yet.';
-  return `${count.toLocaleString('en-US')} inbox thread${count === 1 ? '' : 's'} since midnight.`;
+  const base = `${count.toLocaleString('en-US')} inbox thread${count === 1 ? '' : 's'} since midnight`;
+  // Say plainly that the list below is a subset — a truncated list read as a
+  // complete one is how you miss the seventh email.
+  if (shown > 0 && count > shown) return `${base} · newest ${shown} below.`;
+  return `${base}.`;
 }
 
 /** True when the last sync is old enough that the numbers above may have moved. */
@@ -65,11 +69,13 @@ export default function DayBrief({
   items,
   lastGoogleSync,
   inboxCount,
+  inboxDigest,
   refresh,
 }: {
   items: TimelineItem[];
   lastGoogleSync: string | null;
   inboxCount: number | null;
+  inboxDigest: InboxMessage[];
   refresh: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
@@ -110,7 +116,7 @@ export default function DayBrief({
           <div className="eyebrow">Calendar &amp; email</div>
           <p className="mt-1.5 text-[13px] leading-relaxed">{calendar.text}</p>
           <p className="mt-0.5 text-[13px] leading-relaxed text-[color:var(--muted)]">
-            {describeInbox(inboxCount)}
+            {describeInbox(inboxCount, inboxDigest.length)}
           </p>
         </div>
         <button
@@ -133,6 +139,26 @@ export default function DayBrief({
         <p className="mt-2 text-[12px]" style={{ color: 'var(--red)' }} role="alert">
           {error}
         </p>
+      )}
+
+      {inboxDigest.length > 0 && (
+        <ul className="mt-2 border-t pt-1" style={{ borderColor: 'var(--hairline)' }}>
+          {inboxDigest.map((msg, i) => (
+            <li
+              key={`${msg.time}-${msg.subject}-${i}`}
+              className="flex items-start gap-3 py-2.5"
+              style={i > 0 ? { borderTop: '1px solid var(--hairline)' } : undefined}
+            >
+              <span className="pt-0.5 font-mono text-[12px] text-[color:var(--faint)]">
+                {msg.time || '—'}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px]">{msg.subject}</p>
+                <p className="mt-0.5 truncate text-[11.5px] text-[color:var(--muted)]">{msg.from}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
 
       {items.length > 0 && (

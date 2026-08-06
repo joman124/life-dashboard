@@ -5,7 +5,7 @@
 // mount, exposes refresh(), and re-fetches after every mutation.
 
 import { useCallback, useEffect, useState } from 'react';
-import type { Entry, Metric, TimelineItem } from '@/lib/types';
+import type { Entry, InboxMessage, Metric, TimelineItem } from '@/lib/types';
 import { todayISO } from '@/lib/dates';
 
 /** Matches the `days` ceiling enforced by GET /api/entries. */
@@ -14,6 +14,8 @@ const MAX_ENTRY_DAYS = 3650;
 export interface SyncState {
   lastGoogleSync: string | null;
   todayInboxCount: number | null;
+  /** Newest few inbox messages for today. Empty until a sync has run. */
+  inboxDigest: InboxMessage[];
 }
 
 export interface NewMetricInput {
@@ -57,6 +59,7 @@ export function useDashboard() {
   const [syncState, setSyncState] = useState<SyncState>({
     lastGoogleSync: null,
     todayInboxCount: null,
+    inboxDigest: [],
   });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);

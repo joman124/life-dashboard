@@ -9,7 +9,7 @@
 // nudging with steppers or typing into a form.
 
 import { useState } from 'react';
-import type { Entry, Metric, TimelineItem } from '@/lib/types';
+import type { Entry, InboxMessage, Metric, TimelineItem } from '@/lib/types';
 import { lastNDates } from '@/lib/dates';
 import { topCorrelations } from '@/lib/correlations';
 import MetricCard from '../MetricCard';
@@ -28,6 +28,7 @@ export default function Today({
   today,
   lastGoogleSync,
   inboxCount,
+  inboxDigest,
   onLog,
   onSaveAll,
   refresh,
@@ -38,6 +39,7 @@ export default function Today({
   today: string;
   lastGoogleSync: string | null;
   inboxCount: number | null;
+  inboxDigest: InboxMessage[];
   onLog: (metricId: string, value: number, date: string) => void;
   onSaveAll: (date: string, values: PendingEntry[]) => Promise<string | null>;
   refresh: () => Promise<void>;
@@ -112,6 +114,7 @@ export default function Today({
         items={timeline}
         lastGoogleSync={lastGoogleSync}
         inboxCount={inboxCount}
+        inboxDigest={inboxDigest}
         refresh={refresh}
       />
     </div>

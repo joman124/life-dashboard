@@ -240,6 +240,7 @@ export default function Page() {
             today={today}
             lastGoogleSync={dash.syncState.lastGoogleSync}
             inboxCount={dash.syncState.todayInboxCount}
+            inboxDigest={dash.syncState.inboxDigest}
             onLog={(metricId, value, date) => void dash.logEntry(metricId, value, date)}
             onSaveAll={dash.logMany}
             refresh={dash.refresh}

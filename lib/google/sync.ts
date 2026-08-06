@@ -12,6 +12,7 @@
  */
 import { google } from 'googleapis';
 import type { Auth } from 'googleapis';
+import type { InboxMessage } from '@/lib/types';
 import { endOfDay, formatClock, startOfDay, todayISO } from '@/lib/dates';
 import {
   replaceCalendarTimeline,
@@ -25,10 +26,16 @@ import {
 export interface SyncResult {
   calendar: { events: number };
   deepWork: { hours: number } | null;
-  gmail: { inboxCount: number } | null;
+  gmail: { inboxCount: number; digest: InboxMessage[] } | null;
   lastSync: string;
-  errors: { calendar?: string; gmail?: string };
+  errors: { calendar?: string; gmail?: string; gmailDigest?: string };
 }
+
+/**
+ * How many messages the Today brief summarises. Each one costs a metadata
+ * fetch, and a summary you have to scroll is not a summary.
+ */
+const INBOX_DIGEST_SIZE = 6;
 
 /** Events whose title looks like focused work feed the Deep Work metric. */
 const DEEP_WORK_RE = /deep work|focus|writing|build/i;
@@ -129,12 +136,72 @@ async function syncCalendar(auth: Auth.OAuth2Client, today: string): Promise<Cal
   };
 }
 
-async function syncGmailInboxCount(auth: Auth.OAuth2Client, today: string): Promise<number> {
-  const gmail = google.gmail({ version: 'v1', auth });
+/** Read one header by name, case-insensitively. Absent → ''. */
+function headerValue(
+  headers: { name?: string | null; value?: string | null }[],
+  name: string,
+): string {
+  const hit = headers.find((h) => h.name?.toLowerCase() === name.toLowerCase());
+  return hit?.value?.trim() ?? '';
+}
 
-  // Gmail's date query uses YYYY/MM/DD. `after:` is midnight-inclusive of today.
-  const q = `in:inbox after:${today.replace(/-/g, '/')}`;
+/**
+ * Reduce a From header to something worth reading in a list.
+ * `"Jane Doe" <jane@x.com>` → `Jane Doe`; a bare address stays as-is.
+ */
+export function displayFrom(raw: string): string {
+  const angled = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(raw);
+  if (angled) {
+    const name = (angled[1] ?? '').trim();
+    return name || (angled[2] ?? '').trim();
+  }
+  return raw.trim() || 'Unknown sender';
+}
 
+/**
+ * The newest few inbox messages with sender, subject and arrival time.
+ *
+ * Deliberately separate from the count: the count is one cheap list call, this
+ * is one metadata fetch per message. Kept to INBOX_DIGEST_SIZE and fetched in
+ * parallel so an inbox of any size costs the same.
+ */
+async function fetchInboxDigest(
+  gmail: ReturnType<typeof google.gmail>,
+  q: string,
+): Promise<InboxMessage[]> {
+  const list = await gmail.users.messages.list({ userId: 'me', q, maxResults: INBOX_DIGEST_SIZE });
+  const ids = (list.data.messages ?? [])
+    .map((m) => m.id)
+    .filter((id): id is string => typeof id === 'string');
+
+  const messages = await Promise.all(
+    ids.map(async (id) => {
+      // format=metadata avoids downloading bodies — we only render headers, and
+      // pulling message bodies into the local DB is more of the mailbox than
+      // this dashboard has any reason to hold.
+      const res = await gmail.users.messages.get({
+        userId: 'me',
+        id,
+        format: 'metadata',
+        metadataHeaders: ['From', 'Subject'],
+      });
+      const headers = res.data.payload?.headers ?? [];
+      const internal = res.data.internalDate;
+      return {
+        from: displayFrom(headerValue(headers, 'From')),
+        subject: headerValue(headers, 'Subject') || '(no subject)',
+        time: internal ? formatClock(new Date(Number(internal))) : '',
+      };
+    }),
+  );
+
+  return messages;
+}
+
+async function countInboxThreads(
+  gmail: ReturnType<typeof google.gmail>,
+  q: string,
+): Promise<number> {
   let count = 0;
   let pageToken: string | undefined;
   let pages = 0;
@@ -187,9 +254,27 @@ export async function syncGoogle(auth: Auth.OAuth2Client): Promise<SyncResult> {
 
   // Gmail (independent failure).
   try {
-    const inboxCount = await syncGmailInboxCount(auth, today);
+    const client = google.gmail({ version: 'v1', auth });
+    // Gmail's date query uses YYYY/MM/DD. `after:` is midnight-inclusive of today.
+    const q = `in:inbox after:${today.replace(/-/g, '/')}`;
+
+    const inboxCount = await countInboxThreads(client, q);
     await setSyncValue('today_inbox_count', String(inboxCount));
-    gmail = { inboxCount };
+
+    // The digest is a second, more expensive call. It is written — and its
+    // failure reported — separately, so losing the subject lines never costs
+    // us the count that was already fetched successfully.
+    let digest: InboxMessage[] = [];
+    try {
+      digest = await fetchInboxDigest(client, q);
+    } catch (e) {
+      errors.gmailDigest = apiErrorMessage(e);
+    }
+    // Stamped with the date it describes: a digest left over from yesterday
+    // must not be rendered as today's mail.
+    await setSyncValue('today_inbox_digest', JSON.stringify({ date: today, messages: digest }));
+
+    gmail = { inboxCount, digest };
   } catch (e) {
     errors.gmail = apiErrorMessage(e);
   }

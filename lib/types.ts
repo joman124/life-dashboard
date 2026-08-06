@@ -45,6 +45,19 @@ export interface Entry {
   value: number;
 }
 
+/**
+ * One inbox message, reduced to what the Today brief shows. Lives here rather
+ * than beside the Gmail sync so client components can name the type without
+ * importing a module that pulls in googleapis.
+ */
+export interface InboxMessage {
+  /** Display name where the sender has one, else the bare address. */
+  from: string;
+  subject: string;
+  /** Arrival time as HH:MM in the dashboard timezone. */
+  time: string;
+}
+
 export interface TimelineItem {
   id: number;
   /** Local-time calendar date, YYYY-MM-DD. */
