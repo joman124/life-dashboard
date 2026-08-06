@@ -15,3 +15,6 @@ HANDOFF.md
 
 # Contains the live Apple Health bearer token - never commit
 APPLE-HEALTH-SETUP.md
+
+# Contains the live Apple Health bearer token - never commit
+HANDOFF-APPLE-HEALTH.md
