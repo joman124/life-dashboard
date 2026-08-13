@@ -76,6 +76,35 @@ function coerceNumber(value: unknown, unit?: string): number | null {
   return null;
 }
 
+/** Short, quoted echo of a rejected value so the reason names what was sent. */
+function echoValue(value: unknown): string {
+  if (typeof value !== 'string') return String(value);
+  const s = value.trim();
+  return `"${s.length > 30 ? `${s.slice(0, 30)}…` : s}"`;
+}
+
+/**
+ * Why a matched metric's value couldn't be read. Generic 'non-numeric value' is
+ * kept for the ordinary case, but the two duration mix-ups get named outright —
+ * they are the ones a user can actually fix, and "non-numeric value" against a
+ * string that plainly reads as a time is more confusing than no message at all.
+ */
+function unreadableReason(value: unknown, metricName: string, unit?: string): string {
+  // An empty string almost always means a Shortcut sent a variable that never
+  // got filled in — a distinct problem from typing something unreadable, and
+  // one you fix in the Shortcut rather than in what you typed.
+  if (typeof value === 'string' && value.trim() === '') {
+    return 'empty value — the Shortcut sent this key with nothing in it';
+  }
+  if (typeof value === 'string' && looksLikeDuration(value.trim())) {
+    if (isTimeUnit(unit)) {
+      return `could not read ${echoValue(value)} as a duration — use a form like 3h 24m, 3:24, 204m, or 3.4`;
+    }
+    return `${echoValue(value)} looks like a duration, but ${metricName} is measured in ${unit ?? 'a non-time unit'} — send a plain number`;
+  }
+  return 'non-numeric value';
+}
+
 /**
  * Match a flat health payload against the known metrics.
  *
@@ -88,14 +117,15 @@ function coerceNumber(value: unknown, unit?: string): number | null {
  *   scale. See lib/health/stateOfMind.ts for why this can't share the generic
  *   numeric path.
  * - Every other key is matched to a metric (first whose normalized id OR name
- *   equals the normalized key), then coerced to a number — the metric is
- *   resolved first only so its `unit` can enable duration strings like
- *   "3h 24m" for time-based metrics. Non-numeric → ignored ('non-numeric
- *   value'); no metric → ignored ('no matching metric').
+ *   equals the normalized key), and only then is its value read. No metric →
+ *   ignored ('no matching metric'). Unreadable value → ignored, with a reason
+ *   naming the actual problem.
  *
- *   Reporting order is deliberate: a key that is BOTH unmatched and
- *   unparseable reports the value problem, because that is the one the user
- *   can act on without knowing the metric list.
+ *   The metric must be resolved first because readability is unit-dependent:
+ *   "3h 24m" is a valid duration for a metric measured in hours and nonsense
+ *   for one measured in steps. (Earlier this ran the other way round, which
+ *   made a missing metric report 'non-numeric value' and sent users hunting a
+ *   formatting bug that wasn't there.)
  *
  * Metrics may be active or inactive: values are stored regardless and surface
  * when the metric is toggled on. Matching is order-stable in the metrics array.
@@ -159,18 +189,21 @@ export function matchHealthPayload(
       continue;
     }
 
-    // Resolved before coercion purely to learn the unit; the reason precedence
-    // below is unchanged — a bad value is still reported ahead of a bad key.
+    // The metric is resolved FIRST because whether a value is readable now
+    // depends on the metric's unit — "3h 24m" is valid for a metric measured in
+    // hours and meaningless for one measured in steps. Judging the value first
+    // meant an unmatched key reported 'non-numeric value', blaming a perfectly
+    // good duration for a metric that simply wasn't there.
     const hit = findMetric(normKey);
-
-    const value = coerceNumber(payload[key], hit?.metric.unit);
-    if (value === null) {
-      ignored.push({ key, reason: 'non-numeric value' });
+    if (!hit) {
+      ignored.push({ key, reason: 'no matching metric' });
       continue;
     }
 
-    if (!hit) {
-      ignored.push({ key, reason: 'no matching metric' });
+    const unit = hit.metric.unit;
+    const value = coerceNumber(payload[key], unit);
+    if (value === null) {
+      ignored.push({ key, reason: unreadableReason(payload[key], hit.metric.name, unit) });
       continue;
     }
 

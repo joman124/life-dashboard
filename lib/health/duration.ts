@@ -32,8 +32,10 @@ export function isTimeUnit(unit: string | undefined): unit is TimeUnit {
  * Accepted: h / hr / hrs / hour / hours, m / min / mins / minute / minutes,
  * any spacing, any casing.
  */
+// The separator between the two parts allows a comma, because iOS renders the
+// duration as "3 hr, 24 min" in some locales and list views.
 const HM_RE =
-  /^(?:(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours))?\s*(?:(\d+(?:\.\d+)?)\s*(?:m|min|mins|minute|minutes))?$/i;
+  /^(?:(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours))?[,\s]*(?:(\d+(?:\.\d+)?)\s*(?:m|min|mins|minute|minutes))?$/i;
 
 /** "3:24" — hours:minutes, the other way iOS renders a duration. */
 const COLON_RE = /^(\d+):([0-5]?\d)$/;

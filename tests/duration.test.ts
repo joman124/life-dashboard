@@ -36,6 +36,11 @@ describe('parseDuration to hours', () => {
     expect(parseDuration('3HRS 24MINS', 'h')).toBe(3.4);
   });
 
+  test('accepts the comma separator iOS uses in some locales', () => {
+    expect(parseDuration('3 hr, 24 min', 'h')).toBe(3.4);
+    expect(parseDuration('3h, 24m', 'h')).toBe(3.4);
+  });
+
   test('accepts hours only and minutes only', () => {
     expect(parseDuration('3h', 'h')).toBe(3);
     expect(parseDuration('45m', 'h')).toBe(0.75);
@@ -114,18 +119,36 @@ describe('matchHealthPayload — duration strings', () => {
     // "9h" against a count metric is nonsense, and must not become 9.
     const r = matchHealthPayload({ steps: '9h' }, METRICS, DATE);
     expect(r.imported).toHaveLength(0);
-    expect(r.ignored).toEqual([{ key: 'steps', reason: 'non-numeric value' }]);
+    // And the reason says why, rather than the unhelpful 'non-numeric value':
+    // the string is fine, it's the pairing with a count metric that isn't.
+    expect(r.ignored[0].key).toBe('steps');
+    expect(r.ignored[0].reason).toContain('measured in count');
   });
 
-  test('an unparseable duration is reported, not dropped silently', () => {
+  test('an unparseable duration names the formats that would work', () => {
     const r = matchHealthPayload({ 'screen-time': 'about three hours' }, METRICS, DATE);
     expect(r.imported).toHaveLength(0);
-    expect(r.ignored).toEqual([{ key: 'screen-time', reason: 'non-numeric value' }]);
+    expect(r.ignored[0].reason).toContain('3h 24m');
+    expect(r.ignored[0].reason).toContain('about three hours');
   });
 
-  test('preserves the reason precedence for an unmatched, unparseable key', () => {
+  test('echoes long junk in truncated form rather than dumping it', () => {
+    const r = matchHealthPayload({ 'screen-time': 'h'.repeat(120) }, METRICS, DATE);
+    expect(r.ignored[0].reason).toContain('…');
+    expect(r.ignored[0].reason.length).toBeLessThan(140);
+  });
+
+  test('an empty value blames the Shortcut wiring, not the format', () => {
+    // {"screenTime": ""} is what a Shortcut posts when the Provided Input
+    // variable never got inserted into the Text action.
+    const r = matchHealthPayload({ 'screen-time': '' }, METRICS, DATE);
+    expect(r.imported).toHaveLength(0);
+    expect(r.ignored[0].reason).toContain('empty value');
+  });
+
+  test('an unmatched key reports the missing metric, not a value problem', () => {
     const r = matchHealthPayload({ nonsense: 'abc' }, METRICS, DATE);
-    expect(r.ignored).toEqual([{ key: 'nonsense', reason: 'non-numeric value' }]);
+    expect(r.ignored).toEqual([{ key: 'nonsense', reason: 'no matching metric' }]);
   });
 
   test('a full morning payload mixes durations, counts, and valence', () => {
