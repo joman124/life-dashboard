@@ -305,6 +305,7 @@ The webhook accepts JSON shaped like:
 - `date` is optional and defaults to today.
 - Every other key is matched against your metrics' **names and ids**, case/space/separator-insensitively — so `"steps"`, `"Steps"`, `"deep work"`, `"deep_work"`, and `"deepWork"` all match the same metric.
 - Values can be numbers or numeric strings (e.g., `"9336"` works the same as `9336`).
+- For metrics measured in **hours or minutes**, written durations are accepted too — `"3h 24m"`, `"3:24"`, `"204m"`, `"3 hours 24 minutes"` — and converted into the metric's own unit. This is what lets you type Screen Time and Sleep exactly as iOS displays them. Bare numbers are unaffected and still mean the metric's unit.
 - Keys that don't match any metric, or whose value isn't numeric, are skipped rather than rejected. The response lists what was imported and what was ignored, so you can see exactly what happened.
 - **`stateOfMind` is the one special key.** Its value is an Apple valence in `-1 … +1` (or one of the seven labels, or a list of either) and is converted onto the **Mood** metric's 1–10 scale — see [Add your Journal mood](#add-your-journal-mood-state-of-mind). `valence`, `moodValence`, `journalMood`, and `stateOfMindValence` are accepted as aliases. Converted values carry a `note` in the response showing the arithmetic.
 
@@ -320,7 +321,9 @@ and click **Import**. This is the fastest way to test the payload format, or to 
 
 ## Screen Time, and what cannot be automated
 
-**Screen Time has no API.** Not a REST endpoint, not a HealthKit sample type, not a Shortcuts action. Apple exposes it only through the `DeviceActivity` and `FamilyControls` frameworks, which are available to native iOS apps, run inside a privacy sandbox that forbids sending the numbers off-device, and are unreachable from a web app or a Shortcut. No amount of work on this dashboard changes that.
+**Screen Time has no API.** Not a REST endpoint, not a HealthKit sample type, not a Shortcuts action. Apple exposes it only through the `DeviceActivity` and `FamilyControls` frameworks, which are available to native iOS apps, run inside a privacy sandbox that forbids sending the numbers off-device, and are unreachable from a web app or a Shortcut. Even Apple's own `DeviceActivityReport` renders usage inside a sandboxed view that cannot pass the figures back to the app hosting it. No amount of work on this dashboard changes that.
+
+So *reading* the number stays manual — but that's the only manual part. [The Shortcut below](#logging-screen-time-with-one-tap) opens Screen Time, prompts you, and posts what you type, in the format your phone already displays it.
 
 **Apple Health cannot be read by a web page either.** HealthKit is on-device only. Mobile Safari has no access to it under any circumstance. The iOS Shortcut exists precisely because it is the one sanctioned way to get HealthKit data out — the Shortcut reads Health locally and *pushes* to the webhook. Nothing pulls.
 
@@ -331,10 +334,73 @@ So the split is:
 | Google Calendar / Gmail | Real OAuth sync, fully automatic, works from the phone browser |
 | Apple Health (steps, sleep) | iOS Shortcut pushes to the webhook on a morning schedule |
 | Apple Journal (State of Mind → Mood) | Same Shortcut — HealthKit valence, converted to the 1–10 Mood scale |
-| Screen Time | Manual — read it off the phone, type it into the form |
+| Screen Time | Semi-manual — a Shortcut opens Settings, prompts you, and posts what you type |
 | Oura / Whoop / Fitbit | Not built, but these have real cloud APIs and would be proper connectors |
 
-A **Screen Time** metric (📱, goal ≤ 3h/day) is set up for you. Because it is manual, the quickest route is the **Form** toggle on the Today tab: open Settings → Screen Time on your phone, read the daily average, and type it in alongside everything else. The seven-day strip means you can backfill a few days at once on a Sunday rather than remembering nightly.
+A **Screen Time** metric (📱, goal ≤ 3h/day) is set up for you. Reading the number is the only part that can't be automated — everything after it can, using the Shortcut below.
+
+### Logging Screen Time with one tap
+
+This Shortcut can't read Screen Time (nothing can), so instead it **opens Screen Time for you, asks for the number, and posts it**. You read one figure and type it; the Shortcut does the rest. It takes about five seconds a day.
+
+**Part 1 — build the Shortcut**
+
+1. On your iPhone, open the **Shortcuts** app.
+2. Tap the **+** in the top-right corner to create a new shortcut.
+3. Tap **Add Action**. In the search box, type `Open App`, then tap the **Open App** action in the results.
+4. In the action that appears, tap the blue **App** placeholder, search for `Settings`, and select it. (This puts you one tap from the number.)
+5. Tap **Add Action** again. Search for `Ask for Input` and tap it.
+6. In that action, tap the text next to **Prompt** and type: `Screen Time today?`
+7. On the same action, tap **Text** next to **Input Type** and change it to **Text**. Leave it as Text — not Number — so you can type `3h 24m` exactly as your phone shows it.
+8. Tap **Add Action**. Search for `Text` and tap the plain **Text** action.
+9. Type this into the Text box exactly, including the braces and quotes, but **stop before typing the last `}`**:
+   ```
+   {"screenTime": "
+   ```
+   Now tap the **Provided Input** / **Ask for Input** variable from the suggestion bar just above the keyboard, so it gets inserted as a blue token. Then finish the line by typing:
+   ```
+   "}
+   ```
+   The finished line reads `{"screenTime": "▸Provided Input◂"}`.
+10. Tap **Add Action**. Search for `Get Contents of URL` and tap it.
+11. Paste your webhook URL into the **URL** field. Get it from the app: **⚙ Track → Connectors → Apple Health → Webhook URL → Copy**.
+12. On that same action, tap the **▸** arrow to expand its options.
+13. Tap **Method** and change it from `GET` to **POST**.
+14. Tap **Headers**, then **Add new header**. For the key type `Authorization`, and for the value type `Bearer ` followed by your token — copy the token from **⚙ Track → Connectors → Apple Health → Bearer token → Copy**. The value must look like `Bearer abc123…`, with a single space after the word Bearer.
+15. Add a second header: key `Content-Type`, value `application/json`.
+16. Tap **Request Body** and choose **File**. Then tap the body field and select the **Text** variable from step 9.
+17. Tap the shortcut's name at the top, choose **Rename**, and call it `Log Screen Time`.
+18. Tap **Done** in the top-right.
+
+**Part 2 — test it before automating**
+
+19. Tap your new **Log Screen Time** shortcut to run it. Settings opens.
+20. In Settings, tap **Screen Time**, then tap **See All App & Website Activity**. The big number at the top of the **Day** tab is today's total — something like `3h 24m`.
+21. Swipe back to the Shortcut prompt (or reopen Shortcuts if it closed) and type that number in exactly as shown, e.g. `3h 24m`. Tap **Done**.
+22. Open Life Dashboard and check the **Today** tab. Screen Time should show the value you typed — `3h 24m` appears as `3.4h`. **If it doesn't**, open **⚙ Track → Connectors → Apple Health** and use the **Manual import** box to paste `{"screenTime": "3h 24m"}` and tap Import; the result line will name the exact problem.
+
+**Part 3 — get reminded each evening**
+
+23. In the Shortcuts app, tap the **Automation** tab at the bottom.
+24. Tap **+** in the top-right, then tap **Time of Day**.
+25. Set the time to **9:00 PM**, choose **Daily**, and tap **Next**.
+26. Tap **Run Shortcut**, then select **Log Screen Time**.
+27. Leave **Ask Before Running** turned **on** for this one — unlike the morning health sync, this Shortcut needs you present to type the number, so a silent 9pm run would do nothing.
+28. Tap **Done**.
+
+**What the app accepts for Screen Time.** Any of these work, so you can type whatever's on screen without converting anything:
+
+| You type | Stored |
+|---|---|
+| `3h 24m` | 3.4h |
+| `3h24m` · `3 hours 24 minutes` · `3hr 24min` | 3.4h |
+| `3:24` | 3.4h |
+| `204m` | 3.4h |
+| `3.4` | 3.4h |
+
+The same parsing applies to any metric measured in hours or minutes, so Sleep takes `7h 36m` too. Anything it can't read — `about three hours` — is reported in the response's `ignored` list rather than guessed at or silently dropped.
+
+**Prefer no Shortcut at all?** Use the **Form** toggle on the Today tab: open Settings → Screen Time, read the daily number, and type it alongside everything else. The seven-day strip means you can backfill several days at once on a Sunday rather than remembering nightly.
 
 ## Troubleshooting
 
@@ -346,6 +412,7 @@ A **Screen Time** metric (📱, goal ≤ 3h/day) is set up for you. Because it i
 | Connector shows **Reconnect needed**, or a sync reports `invalid_grant` | The stored refresh token is dead, so Calendar and Gmail both stop together. Click **Reconnect Google** in Track → Connectors — no need to redo the Google Cloud setup. If it keeps coming back every week, your OAuth consent screen is still in **Testing**, where Google expires refresh tokens after 7 days; **publish the app** to stop it ([Step 3](#step-3--configure-the-oauth-consent-screen)). Other causes: you revoked access at [myaccount.google.com → Security → Third-party apps](https://myaccount.google.com/permissions), you changed your Google password, or the token went unused for six months. |
 | Sync reports `invalid_client` | Not a token problem — Google doesn't recognise the app's credentials. `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in `.env.local` no longer match the OAuth client in Google Cloud Console (or the client was deleted). Fix the values and restart the server; reconnecting alone won't help. |
 | Connector shows a red **Error** status | Something reconnecting won't fix — most often a `TOKEN_ENCRYPTION_KEY` that no longer decrypts the stored token (it changed, or was lost). Restore the old key, or click **Disconnect** and then **Connect Google** to store a fresh token under the current key. |
+| Screen Time didn't update | Check the `ignored` list in the response. `non-numeric value` against `screenTime` means the text couldn't be read as a duration — stick to the forms in the table above (`3h 24m`, `3:24`, `204m`, `3.4`); phrases like `about 3 hours` are refused rather than guessed at. If the Shortcut posts an empty value, check step 9: the **Provided Input** variable must sit *inside* the quotes as a blue token, not be typed out as words. |
 | Mood didn't update from Journal | Check the `ignored` list in the response. `state of mind must be a valence between -1 and 1` means the Shortcut sent a 1–10 score under the `stateOfMind` key — either send the raw **Valence** detail, or switch the key to `mood`. `no Mood metric` means the Mood metric was deleted; re-add it in Track (name it `Mood`, score out of 10). Also confirm the Journal entry exists for that date — Health → Browse → State of Mind. |
 | Inbox count isn't updating | Click **Sync now** manually. The count reflects threads from the current local day as of the last sync, not live. |
 | **401 Invalid or missing bearer token** from the health import webhook | The token in the Shortcut's `Authorization` header doesn't match the one shown in Track → Connectors → Apple Health. Recopy it from the app. If you rotated the token, update the Shortcut's header value too. |

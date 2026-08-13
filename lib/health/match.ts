@@ -11,6 +11,7 @@
  * metric list (from the DB) and a default date.
  */
 import { isStateOfMindKey, parseValenceValue, MOOD_METRIC_KEY } from './stateOfMind';
+import { isTimeUnit, looksLikeDuration, parseDuration } from './duration';
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -53,13 +54,22 @@ export interface HealthMatch {
  * Note: Number('') === 0, so empty/whitespace strings are rejected explicitly
  * before the numeric coercion to avoid silently importing a bogus 0.
  */
-function coerceNumber(value: unknown): number | null {
+function coerceNumber(value: unknown, unit?: string): number | null {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
   }
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (trimmed === '') return null;
+
+    // A written duration ("3h 24m", "3:24") — but only for a metric measured in
+    // time, and only when the string actually carries a unit letter or colon.
+    // Bare numbers stay on the plain path below so this can never reinterpret a
+    // payload that already worked.
+    if (isTimeUnit(unit) && looksLikeDuration(trimmed)) {
+      return parseDuration(trimmed, unit);
+    }
+
     const n = Number(trimmed);
     return Number.isFinite(n) ? n : null;
   }
@@ -77,17 +87,22 @@ function coerceNumber(value: unknown): number | null {
  *   Journal labels, or a list of either), converted to the Mood metric's 1–10
  *   scale. See lib/health/stateOfMind.ts for why this can't share the generic
  *   numeric path.
- * - Every other key is coerced to a number. Non-finite → ignored
- *   ('non-numeric value'). Otherwise the first metric whose normalized id OR
- *   name equals the normalized key wins → imported. No metric matches →
- *   ignored ('no matching metric').
+ * - Every other key is matched to a metric (first whose normalized id OR name
+ *   equals the normalized key), then coerced to a number — the metric is
+ *   resolved first only so its `unit` can enable duration strings like
+ *   "3h 24m" for time-based metrics. Non-numeric → ignored ('non-numeric
+ *   value'); no metric → ignored ('no matching metric').
+ *
+ *   Reporting order is deliberate: a key that is BOTH unmatched and
+ *   unparseable reports the value problem, because that is the one the user
+ *   can act on without knowing the metric list.
  *
  * Metrics may be active or inactive: values are stored regardless and surface
  * when the metric is toggled on. Matching is order-stable in the metrics array.
  */
 export function matchHealthPayload(
   payload: Record<string, unknown>,
-  metrics: { id: string; name: string }[],
+  metrics: { id: string; name: string; unit?: string }[],
   defaultDate: string
 ): HealthMatch {
   // Resolve the date first, and remember whether it came from the payload so we
@@ -144,13 +159,16 @@ export function matchHealthPayload(
       continue;
     }
 
-    const value = coerceNumber(payload[key]);
+    // Resolved before coercion purely to learn the unit; the reason precedence
+    // below is unchanged — a bad value is still reported ahead of a bad key.
+    const hit = findMetric(normKey);
+
+    const value = coerceNumber(payload[key], hit?.metric.unit);
     if (value === null) {
       ignored.push({ key, reason: 'non-numeric value' });
       continue;
     }
 
-    const hit = findMetric(normKey);
     if (!hit) {
       ignored.push({ key, reason: 'no matching metric' });
       continue;

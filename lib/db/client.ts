@@ -16,7 +16,7 @@
 import { createClient, type Client } from '@libsql/client';
 import fs from 'fs';
 import path from 'path';
-import { seed, DEFAULT_METRICS, MOOD_METRIC_ID } from '@/lib/seed';
+import { seed, DEFAULT_METRICS, ADDED_METRIC_IDS } from '@/lib/seed';
 
 export type DB = Client;
 
@@ -91,44 +91,48 @@ const SCHEMA_STATEMENTS: string[] = [
  * cannot re-run and undo a later user decision.
  */
 async function runMigrations(client: Client): Promise<void> {
-  const MOOD_MARKER = 'migration_mood_metric_v1';
+  // One marker per added metric, so introducing a new one later is not blocked
+  // by the marker an earlier migration already wrote.
+  for (const metricId of ADDED_METRIC_IDS) {
+    const marker = `migration_metric_${metricId}_v1`;
 
-  const marker = await client.execute({
-    sql: 'SELECT value FROM sync_state WHERE key = ?',
-    args: [MOOD_MARKER],
-  });
-  if (marker.rows.length > 0) return;
+    const seen = await client.execute({
+      sql: 'SELECT value FROM sync_state WHERE key = ?',
+      args: [marker],
+    });
+    if (seen.rows.length > 0) continue;
 
-  // Mood is fed by Apple Journal's State of Mind through the health webhook; a
-  // database seeded before that existed has nowhere to put the value, and the
-  // import would be reported as ignored ('no Mood metric') forever.
-  const mood = DEFAULT_METRICS.find((m) => m.id === MOOD_METRIC_ID);
-  if (mood) {
+    // These metrics postdate the original seed: Mood receives Apple Journal's
+    // State of Mind, Screen Time receives the number the Shortcut prompts for.
+    // Without the row, an import has nowhere to land and is reported as ignored.
+    const m = DEFAULT_METRICS.find((d) => d.id === metricId);
+    if (m) {
+      await client.execute({
+        sql: `INSERT INTO metrics (id, name, emoji, unit, goal, goalDirection, step, "max", active, category, description)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT (id) DO NOTHING`,
+        args: [
+          m.id,
+          m.name,
+          m.emoji,
+          m.unit,
+          m.goal,
+          m.goalDirection,
+          m.step,
+          m.max,
+          m.active,
+          m.category,
+          m.description,
+        ],
+      });
+    }
+
     await client.execute({
-      sql: `INSERT INTO metrics (id, name, emoji, unit, goal, goalDirection, step, "max", active, category, description)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (id) DO NOTHING`,
-      args: [
-        mood.id,
-        mood.name,
-        mood.emoji,
-        mood.unit,
-        mood.goal,
-        mood.goalDirection,
-        mood.step,
-        mood.max,
-        mood.active,
-        mood.category,
-        mood.description,
-      ],
+      sql: `INSERT INTO sync_state (key, value) VALUES (?, ?)
+            ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+      args: [marker, new Date().toISOString()],
     });
   }
-
-  await client.execute({
-    sql: `INSERT INTO sync_state (key, value) VALUES (?, ?)
-          ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
-    args: [MOOD_MARKER, new Date().toISOString()],
-  });
 }
 
 /* ------------------------------------------------------------- singleton */
