@@ -5,7 +5,9 @@
  * url-encoded error (never a blank page, never a silent failure).
  */
 import { NextResponse } from 'next/server';
+import { deleteSyncValue } from '@/lib/db';
 import { fetchAccountEmail, isConfigured, makeOAuthClient, persistTokens } from '@/lib/google/client';
+import { GOOGLE_AUTH_ERROR_KEY } from '@/lib/google/sync';
 import { toErrorMessage } from '@/lib/http';
 
 export const runtime = 'nodejs';
@@ -41,6 +43,10 @@ export async function GET(req: Request) {
 
     // Persist last (after email lookup) so the stored row carries the email.
     await persistTokens(tokens, email);
+
+    // Fresh consent supersedes any recorded expiry — clear it, or the connector
+    // would still show "Reconnect needed" against a working connection.
+    await deleteSyncValue(GOOGLE_AUTH_ERROR_KEY);
 
     return home('status=connected');
   } catch (e) {

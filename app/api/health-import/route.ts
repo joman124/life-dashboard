@@ -15,6 +15,10 @@
  * insensitively against metric id and name; non-matching or non-numeric keys
  * are reported in `ignored` rather than failing the request.
  *
+ * `stateOfMind` (and its aliases) is special-cased: Apple Journal / Health store
+ * State of Mind as a -1..+1 valence, which is rescaled onto the Mood metric's
+ * 1–10 scale before it is written. See lib/health/stateOfMind.ts.
+ *
  * Writes are idempotent: each imported value upserts on (metricId, date), so a
  * re-POST overwrites rather than duplicating.
  */
@@ -64,7 +68,14 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       date: result.date,
-      imported: result.imported.map((i) => ({ metricId: i.metricId, value: i.value })),
+      // `note` is present only when the stored value differs from what was
+      // posted (a State of Mind valence rescaled to 1–10), so the response
+      // explains the number rather than leaving it to be worked out.
+      imported: result.imported.map((i) => ({
+        metricId: i.metricId,
+        value: i.value,
+        ...(i.note ? { note: i.note } : {}),
+      })),
       ignored: result.ignored,
       importedCount: result.imported.length,
       lastImport: (await getSyncValue('last_health_import')) ?? lastImport,

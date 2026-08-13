@@ -9,12 +9,19 @@
  *   not_configured — one of the GOOGLE_* envs is missing
  *   disconnected   — configured, but no token stored
  *   connected      — a token is stored (email read from the stored row)
+ *   token_expired  — a token is stored but cannot be refreshed, so the user has
+ *                    to re-consent. Two ways to know this without a network
+ *                    call: the last sync recorded an `invalid_grant` (see
+ *                    GOOGLE_AUTH_ERROR_KEY), or the stored credentials have no
+ *                    refresh_token at all, which means the connection cannot
+ *                    outlive the current access token no matter what.
  *   error          — reading/decrypting the stored token threw (e.g. the
  *                    TOKEN_ENCRYPTION_KEY changed); the message is surfaced
  */
 import { NextResponse } from 'next/server';
 import { getOAuthToken, getSyncValue } from '@/lib/db';
 import { decryptTokenJson, isConfigured } from '@/lib/google/client';
+import { GOOGLE_AUTH_ERROR_KEY } from '@/lib/google/sync';
 import { jsonError, toErrorMessage } from '@/lib/http';
 
 export const runtime = 'nodejs';
@@ -22,7 +29,7 @@ export const dynamic = 'force-dynamic';
 
 interface ConnectorStatus {
   configured: boolean;
-  status: 'not_configured' | 'disconnected' | 'connected' | 'error';
+  status: 'not_configured' | 'disconnected' | 'connected' | 'token_expired' | 'error';
   email: string | null;
   lastSync: string | null;
   todayInboxCount: number | null;
@@ -64,14 +71,44 @@ export async function GET() {
     }
 
     // Verify the stored token is readable (decrypts/parses) without calling out.
+    let credentials;
     try {
-      decryptTokenJson(stored.data);
+      credentials = decryptTokenJson(stored.data);
     } catch (e) {
       const body: ConnectorStatus = {
         configured: true,
         status: 'error',
         email: stored.email ?? null,
         error: toErrorMessage(e),
+        ...base,
+      };
+      return NextResponse.json(body);
+    }
+
+    // Expired/revoked grant recorded by the last sync attempt.
+    const authError = await getSyncValue(GOOGLE_AUTH_ERROR_KEY);
+    if (authError) {
+      const body: ConnectorStatus = {
+        configured: true,
+        status: 'token_expired',
+        email: stored.email ?? null,
+        error: authError,
+        ...base,
+      };
+      return NextResponse.json(body);
+    }
+
+    // No refresh_token means the access token cannot be renewed when it lapses
+    // (~1h), so this connection is already dead even if it hasn't failed yet.
+    // Say so now rather than letting tomorrow's sync be the first sign of it.
+    if (!credentials.refresh_token) {
+      const body: ConnectorStatus = {
+        configured: true,
+        status: 'token_expired',
+        email: stored.email ?? null,
+        error:
+          'Connected without offline access — Google issued no refresh token, so this ' +
+          'connection stops working within the hour. Reconnect to grant it.',
         ...base,
       };
       return NextResponse.json(body);

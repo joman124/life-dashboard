@@ -16,7 +16,7 @@
 import { createClient, type Client } from '@libsql/client';
 import fs from 'fs';
 import path from 'path';
-import { seed } from '@/lib/seed';
+import { seed, DEFAULT_METRICS, MOOD_METRIC_ID } from '@/lib/seed';
 
 export type DB = Client;
 
@@ -78,6 +78,59 @@ const SCHEMA_STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_timeline_date ON timeline(date)`,
 ];
 
+/* --------------------------------------------------------------- migrations */
+
+/**
+ * One-time migrations for databases created before a feature existed.
+ *
+ * Each migration is guarded by a marker row in sync_state, and the marker is
+ * written whether or not the migration changed anything. That "run once, ever"
+ * property is the point: a plain `INSERT OR IGNORE` on every boot would
+ * resurrect a metric the user had deliberately deleted in the Track tab, which
+ * is worse than never adding it. Markers are never removed, so a migration
+ * cannot re-run and undo a later user decision.
+ */
+async function runMigrations(client: Client): Promise<void> {
+  const MOOD_MARKER = 'migration_mood_metric_v1';
+
+  const marker = await client.execute({
+    sql: 'SELECT value FROM sync_state WHERE key = ?',
+    args: [MOOD_MARKER],
+  });
+  if (marker.rows.length > 0) return;
+
+  // Mood is fed by Apple Journal's State of Mind through the health webhook; a
+  // database seeded before that existed has nowhere to put the value, and the
+  // import would be reported as ignored ('no Mood metric') forever.
+  const mood = DEFAULT_METRICS.find((m) => m.id === MOOD_METRIC_ID);
+  if (mood) {
+    await client.execute({
+      sql: `INSERT INTO metrics (id, name, emoji, unit, goal, goalDirection, step, "max", active, category, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (id) DO NOTHING`,
+      args: [
+        mood.id,
+        mood.name,
+        mood.emoji,
+        mood.unit,
+        mood.goal,
+        mood.goalDirection,
+        mood.step,
+        mood.max,
+        mood.active,
+        mood.category,
+        mood.description,
+      ],
+    });
+  }
+
+  await client.execute({
+    sql: `INSERT INTO sync_state (key, value) VALUES (?, ?)
+          ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+    args: [MOOD_MARKER, new Date().toISOString()],
+  });
+}
+
 /* ------------------------------------------------------------- singleton */
 
 const globalForDb = globalThis as unknown as {
@@ -136,6 +189,10 @@ function ensureReady(): Promise<void> {
     const res = await client.execute('SELECT COUNT(*) AS n FROM metrics');
     const n = Number(res.rows[0]?.n ?? 0);
     if (n === 0) await seed(client);
+
+    // After seeding, so a fresh database records the markers as already applied
+    // rather than re-inserting what seed() just wrote.
+    await runMigrations(client);
   })();
 
   // Cache the in-flight promise immediately so parallel callers share it. If it

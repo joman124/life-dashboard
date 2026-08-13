@@ -6,9 +6,11 @@
  * the deterministic core that decides, for a given payload and the current set
  * of metrics, which keys map to which metric and which are ignored (and why).
  *
- * Kept import-free so it is trivially unit-testable in isolation. The route
- * handler supplies the metric list (from the DB) and a default date.
+ * Kept dependency-free apart from the equally-pure State of Mind converter, so
+ * it is trivially unit-testable in isolation. The route handler supplies the
+ * metric list (from the DB) and a default date.
  */
+import { isStateOfMindKey, parseValenceValue, MOOD_METRIC_KEY } from './stateOfMind';
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -21,11 +23,24 @@ export function normalizeKey(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+export interface HealthImported {
+  metricId: string;
+  key: string;
+  value: number;
+  /**
+   * Set only when the stored value isn't the number that was posted — today
+   * that means a State of Mind valence converted to the 1–10 Mood scale. It is
+   * echoed in the webhook response so a surprising number is self-explaining
+   * rather than something to reverse-engineer.
+   */
+  note?: string;
+}
+
 export interface HealthMatch {
   /** Resolved local calendar date (YYYY-MM-DD) the entries are written under. */
   date: string;
   /** Keys that matched a metric and carried a finite numeric value. */
-  imported: { metricId: string; key: string; value: number }[];
+  imported: HealthImported[];
   /** Keys that were skipped, each with a human-readable reason. */
   ignored: { key: string; reason: string }[];
 }
@@ -57,6 +72,11 @@ function coerceNumber(value: unknown): number | null {
  * - `date`: if the payload has a `date` key whose value is a valid YYYY-MM-DD
  *   string, that date is used; otherwise `defaultDate`. The `date` key is never
  *   treated as a metric (it is consumed here and skipped below).
+ * - State of Mind keys ('stateOfMind', 'valence', …) are handled first and
+ *   separately: their value is an Apple valence in [-1, 1] (or one of the seven
+ *   Journal labels, or a list of either), converted to the Mood metric's 1–10
+ *   scale. See lib/health/stateOfMind.ts for why this can't share the generic
+ *   numeric path.
  * - Every other key is coerced to a number. Non-finite → ignored
  *   ('non-numeric value'). Otherwise the first metric whose normalized id OR
  *   name equals the normalized key wins → imported. No metric matches →
@@ -89,8 +109,40 @@ export function matchHealthPayload(
   const imported: HealthMatch['imported'] = [];
   const ignored: HealthMatch['ignored'] = [];
 
+  /** Resolve a metric by normalized id or name; null when there is no such metric. */
+  const findMetric = (normKey: string) =>
+    normalized.find((m) => m.normId === normKey || m.normName === normKey) ?? null;
+
   for (const key of Object.keys(payload)) {
     if (key === 'date') continue; // reserved; consumed above
+
+    const normKey = normalizeKey(key);
+
+    // --- State of Mind: valence in [-1, 1], not a value on the metric's scale ---
+    if (isStateOfMindKey(normKey)) {
+      const mood = findMetric(MOOD_METRIC_KEY);
+      if (!mood) {
+        ignored.push({
+          key,
+          reason: 'no Mood metric — add one in Track to receive State of Mind',
+        });
+        continue;
+      }
+      const parsed = parseValenceValue(payload[key]);
+      if (!parsed.ok) {
+        ignored.push({ key, reason: parsed.reason });
+        continue;
+      }
+      imported.push({
+        metricId: mood.metric.id,
+        key,
+        value: parsed.score,
+        note:
+          `valence ${parsed.valence} → ${parsed.score}/10` +
+          (parsed.samples > 1 ? ` (mean of ${parsed.samples} samples)` : ''),
+      });
+      continue;
+    }
 
     const value = coerceNumber(payload[key]);
     if (value === null) {
@@ -98,8 +150,7 @@ export function matchHealthPayload(
       continue;
     }
 
-    const normKey = normalizeKey(key);
-    const hit = normalized.find((m) => m.normId === normKey || m.normName === normKey);
+    const hit = findMetric(normKey);
     if (!hit) {
       ignored.push({ key, reason: 'no matching metric' });
       continue;

@@ -5,6 +5,7 @@
  */
 import { NextResponse } from 'next/server';
 import { deleteOAuthToken, deleteSyncValue } from '@/lib/db';
+import { GOOGLE_AUTH_ERROR_KEY } from '@/lib/google/sync';
 import { jsonError, toErrorMessage } from '@/lib/http';
 
 export const runtime = 'nodejs';
@@ -15,6 +16,7 @@ export async function POST() {
     await deleteOAuthToken('google');
     await deleteSyncValue('today_inbox_count');
     await deleteSyncValue('last_google_sync');
+    await deleteSyncValue(GOOGLE_AUTH_ERROR_KEY);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return jsonError(toErrorMessage(e), 500);

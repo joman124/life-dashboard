@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { PRIMARY_BTN, PRIMARY_STYLE, errorText, humanizeSync, readError } from './shared';
 
-type GoogleStatus = 'not_configured' | 'disconnected' | 'connected' | 'error';
+type GoogleStatus = 'not_configured' | 'disconnected' | 'connected' | 'token_expired' | 'error';
 
 interface ConnectorState {
   configured: boolean;
@@ -26,8 +26,10 @@ interface SyncResult {
   calendar?: { events: number };
   deepWork?: { hours: number } | null;
   gmail?: { inboxCount: number } | null;
-  lastSync?: string;
+  lastSync?: string | null;
   errors?: { calendar?: string; gmail?: string };
+  authExpired?: boolean;
+  authError?: string;
 }
 
 export default function GoogleConnector({ refresh }: { refresh: () => Promise<void> }) {
@@ -73,6 +75,15 @@ export default function GoogleConnector({ refresh }: { refresh: () => Promise<vo
         return;
       }
       const r = (await res.json()) as SyncResult;
+
+      // An expired grant breaks both APIs at once. Show the one cause and the
+      // one fix — repeating the same OAuth code per source told the user
+      // nothing they could act on.
+      if (r.authExpired) {
+        setSyncErr(r.authError ?? 'Google sign-in expired — reconnect to keep syncing.');
+        return;
+      }
+
       // Calendar and Gmail fail independently, so a partial failure is reported
       // as a partial failure rather than a blanket "sync failed".
       const failures: string[] = [];
@@ -113,14 +124,20 @@ export default function GoogleConnector({ refresh }: { refresh: () => Promise<vo
   }, [loadStatus, refresh]);
 
   const status = google?.status ?? null;
+
+  // token_expired is gold, not red: nothing is broken and no data was lost —
+  // there is simply a button to press. Red is reserved for states the user
+  // can't resolve by reconnecting.
   const chip =
     status === 'connected'
       ? { label: 'Connected', color: 'var(--green)', border: 'var(--green)' }
-      : status === 'error'
-        ? { label: 'Error', color: 'var(--red)', border: 'var(--red)' }
-        : status === 'not_configured'
-          ? { label: 'Not configured', color: 'var(--muted)', border: 'var(--hairline)' }
-          : { label: 'Not connected', color: 'var(--muted)', border: 'var(--hairline)' };
+      : status === 'token_expired'
+        ? { label: 'Reconnect needed', color: 'var(--gold)', border: 'var(--gold-dim)' }
+        : status === 'error'
+          ? { label: 'Error', color: 'var(--red)', border: 'var(--red)' }
+          : status === 'not_configured'
+            ? { label: 'Not configured', color: 'var(--muted)', border: 'var(--hairline)' }
+            : { label: 'Not connected', color: 'var(--muted)', border: 'var(--hairline)' };
 
   const subtitle =
     google === null
@@ -129,23 +146,29 @@ export default function GoogleConnector({ refresh }: { refresh: () => Promise<vo
         ? (google.email ?? 'Connected')
         : status === 'not_configured'
           ? 'Add Google credentials to .env.local — see README.'
-          : status === 'error'
-            ? (google.error ?? 'Connector error.')
-            : "Today's events, Deep Work, and inbox count.";
+          : status === 'token_expired'
+            ? (google.error ?? 'Google sign-in expired — reconnect to keep syncing.')
+            : status === 'error'
+              ? (google.error ?? 'Connector error.')
+              : "Today's events, Deep Work, and inbox count.";
+
+  const subtitleColor =
+    status === 'error' ? 'var(--red)' : status === 'token_expired' ? 'var(--gold)' : 'var(--muted)';
 
   return (
     <div className="py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[14px]">Google Calendar + Gmail</div>
-          <div
-            className="mt-0.5 text-[11.5px]"
-            style={{ color: status === 'error' ? 'var(--red)' : 'var(--muted)' }}
-          >
+          <div className="mt-0.5 text-[11.5px]" style={{ color: subtitleColor }}>
             {subtitle}
           </div>
-          {status === 'connected' && (
+          {(status === 'connected' || status === 'token_expired') && (
             <div className="mt-0.5 text-[11px] text-[color:var(--faint)]">
+              {/* Shown while expired too: "last synced 3 days ago" is how you
+                  tell a token that lapsed this morning from one that has been
+                  quietly dead for a week. */}
+              {google?.email && status === 'token_expired' ? `${google.email} · ` : ''}
               {humanizeSync(google?.lastSync ?? null)}
               {google?.todayInboxCount != null
                 ? ` · ${google.todayInboxCount.toLocaleString('en-US')} inbox today`
@@ -166,7 +189,7 @@ export default function GoogleConnector({ refresh }: { refresh: () => Promise<vo
           Connect Google
         </button>
       )}
-      {status === 'error' && (
+      {(status === 'error' || status === 'token_expired') && (
         <button type="button" onClick={connect} className={`mt-3 ${PRIMARY_BTN}`} style={PRIMARY_STYLE}>
           Reconnect Google
         </button>

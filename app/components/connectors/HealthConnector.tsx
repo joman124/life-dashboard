@@ -19,7 +19,7 @@ interface HealthState {
 
 interface HealthImportResult {
   date: string;
-  imported: { metricId: string; value: number }[];
+  imported: { metricId: string; value: number; note?: string }[];
   ignored: { key: string; reason: string }[];
   importedCount: number;
   lastImport: string;
@@ -88,7 +88,10 @@ export default function HealthConnector({ refresh }: { refresh: () => Promise<vo
       const r = (await res.json()) as HealthImportResult;
       // Report what was ignored as well as what landed — a key that silently
       // matched nothing is the failure mode this connector has to make visible.
-      const imported = r.imported.map((i) => i.metricId);
+      // A converted value (State of Mind valence → 1–10) carries its own note,
+      // so "mood" reads as "mood (valence 0.6 → 8.2/10)" rather than as a
+      // number with no relationship to what the Shortcut sent.
+      const imported = r.imported.map((i) => (i.note ? `${i.metricId} (${i.note})` : i.metricId));
       const ignored = r.ignored.length ? ` · ignored ${r.ignored.map((i) => i.key).join(', ')}` : '';
       setMsg(
         (imported.length
@@ -214,7 +217,7 @@ export default function HealthConnector({ refresh }: { refresh: () => Promise<vo
           rows={2}
           value={paste}
           onChange={(e) => setPaste(e.target.value)}
-          placeholder='{"steps": 9336, "sleep": 7.6}'
+          placeholder='{"steps": 9336, "sleep": 7.6, "stateOfMind": 0.6}'
           aria-label="Health JSON to import"
         />
         <div className="mt-2 flex gap-2">
