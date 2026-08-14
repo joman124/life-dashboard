@@ -319,6 +319,8 @@ You don't need the Shortcut (or even an iPhone) to use this connector. In **⚙ 
 
 and click **Import**. This is the fastest way to test the payload format, or to log a one-off day without setting up networking at all.
 
+The box is forgiving about how the text arrives: curly quotes from a copy-paste, non-breaking spaces from a phone keyboard, a stray ` ``` ` code fence, and a trailing comma are all repaired automatically, and the result line says which of them it had to fix. Well-formed JSON is never altered — the strict parse is always tried first. Anything it genuinely can't read is reported with the position and the name of the offending character, rather than a bare "invalid JSON".
+
 ## Screen Time, and what cannot be automated
 
 **Screen Time has no API.** Not a REST endpoint, not a HealthKit sample type, not a Shortcuts action. Apple exposes it only through the `DeviceActivity` and `FamilyControls` frameworks, which are available to native iOS apps, run inside a privacy sandbox that forbids sending the numbers off-device, and are unreachable from a web app or a Shortcut. Even Apple's own `DeviceActivityReport` renders usage inside a sandboxed view that cannot pass the figures back to the app hosting it. No amount of work on this dashboard changes that.
@@ -372,6 +374,14 @@ This Shortcut can't read Screen Time (nothing can), so instead it **opens Screen
 17. Tap the shortcut's name at the top, choose **Rename**, and call it `Log Screen Time`.
 18. Tap **Done** in the top-right.
 
+> **iOS turns your quotes curly, and JSON doesn't accept curly quotes.** Smart Punctuation rewrites `"` as `“` and `”` as you type — in the Shortcuts Text action, in Safari, everywhere. The two characters look nearly identical, so this is invisible until the import fails. The app repairs it automatically and tells you it did, so your Shortcut will work either way; to stop it at source, turn the setting off:
+>
+> 1. Open the **Settings** app.
+> 2. Tap **General**.
+> 3. Tap **Keyboard**.
+> 4. Scroll to **Smart Punctuation** and turn the toggle **off**.
+> 5. Go back into your Shortcut's **Text** action, delete the quote characters, and retype them — existing curly ones don't change retroactively.
+
 **Part 2 — test it before automating**
 
 19. Tap your new **Log Screen Time** shortcut to run it. Settings opens.
@@ -412,6 +422,7 @@ The same parsing applies to any metric measured in hours or minutes, so Sleep ta
 | Connector shows **Reconnect needed**, or a sync reports `invalid_grant` | The stored refresh token is dead, so Calendar and Gmail both stop together. Click **Reconnect Google** in Track → Connectors — no need to redo the Google Cloud setup. If it keeps coming back every week, your OAuth consent screen is still in **Testing**, where Google expires refresh tokens after 7 days; **publish the app** to stop it ([Step 3](#step-3--configure-the-oauth-consent-screen)). Other causes: you revoked access at [myaccount.google.com → Security → Third-party apps](https://myaccount.google.com/permissions), you changed your Google password, or the token went unused for six months. |
 | Sync reports `invalid_client` | Not a token problem — Google doesn't recognise the app's credentials. `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in `.env.local` no longer match the OAuth client in Google Cloud Console (or the client was deleted). Fix the values and restart the server; reconnecting alone won't help. |
 | Connector shows a red **Error** status | Something reconnecting won't fix — most often a `TOKEN_ENCRYPTION_KEY` that no longer decrypts the stored token (it changed, or was lost). Restore the old key, or click **Disconnect** and then **Connect Google** to store a fresh token under the current key. |
+| **"That isn't valid JSON"** in the paste box | Almost always a character you can't see. Copying from a web page or chat brings **curly quotes** (`“ ”`) instead of straight ones, and phone keyboards insert **non-breaking spaces** that look exactly like spaces. Both are rejected by JSON. The app now repairs these automatically and lists what it fixed under the result — if you still get this error, the message names the position and the offending character. Retype the line by hand using straight `"` quotes rather than pasting it again. |
 | **`no matching metric`** against `screenTime` | The Screen Time metric isn't in your database — this is not a formatting problem, and no amount of retyping the duration will fix it. Open **⚙ Track** and look for **Screen Time** in the metric list. If it's absent, you're running a build from before it was added: pull the latest code and restart the server (deployed, redeploy). The metric is created automatically on the next startup. If you deleted it on purpose, re-add it in Track → Add your own: name `Screen Time`, unit **hours**, goal **at most** `3`. |
 | **`could not read "…" as a duration`** | The text couldn't be parsed. Use one of the accepted forms — `3h 24m`, `3 hr, 24 min`, `3:24`, `204m`, or `3.4`. Phrases like `about 3 hours` are refused rather than guessed at, on purpose. |
 | **`empty value — the Shortcut sent this key with nothing in it`** | The Shortcut posted the key with no value. Open the Shortcut and check the **Text** action (step 9): the **Provided Input** variable must sit *inside* the quotes as a blue token. If you typed the words "Provided Input" by hand, delete them and re-insert the variable from the suggestion bar above the keyboard. |

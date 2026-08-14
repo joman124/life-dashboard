@@ -24,6 +24,7 @@
  */
 import { NextResponse } from 'next/server';
 import { listMetrics, upsertEntry, setSyncValue, getSyncValue } from '@/lib/db';
+import { parseLenientJson } from '@/lib/health/lenientJson';
 import { matchHealthPayload } from '@/lib/health/match';
 import { verifyHealthToken } from '@/lib/health/token';
 import { jsonError, toErrorMessage } from '@/lib/http';
@@ -52,7 +53,17 @@ export async function POST(req: Request) {
     }
 
     // --- body ---
-    const body = await req.json().catch(() => null);
+    // Parsed leniently rather than with req.json(): the Shortcut's Text action
+    // is typed on an iOS keyboard, where Smart Punctuation silently turns " into
+    // curly quotes and breaks the JSON. A strict parse is still tried first, so
+    // a well-formed body is never altered; repairs are reported back so a
+    // Shortcut producing them can be corrected instead of relied on.
+    const rawBody = await req.text().catch(() => '');
+    const parse = parseLenientJson(rawBody);
+    if (!parse.ok) {
+      return jsonError(parse.error, 400);
+    }
+    const body = parse.value;
     if (body === null || typeof body !== 'object' || Array.isArray(body)) {
       return jsonError('Body must be a JSON object like {"steps":9336,"sleep":7.6}', 400);
     }
@@ -77,6 +88,9 @@ export async function POST(req: Request) {
         ...(i.note ? { note: i.note } : {}),
       })),
       ignored: result.ignored,
+      // Present only when the body needed fixing to parse. Surfaced so a
+      // Shortcut quietly emitting curly quotes is visible rather than masked.
+      ...(parse.repairs.length > 0 ? { repairs: parse.repairs } : {}),
       importedCount: result.imported.length,
       lastImport: (await getSyncValue('last_health_import')) ?? lastImport,
     });

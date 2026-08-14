@@ -9,6 +9,7 @@
 // fastest way to verify the endpoint works before wiring up the Shortcut).
 
 import { useCallback, useEffect, useState } from 'react';
+import { parseLenientJson } from '@/lib/health/lenientJson';
 import { PRIMARY_STYLE, SECONDARY_STYLE, errorText, humanizeSync, readError } from './shared';
 
 interface HealthState {
@@ -76,12 +77,14 @@ export default function HealthConnector({ refresh }: { refresh: () => Promise<vo
     setMsgIsWarning(false);
     setErr(null);
     try {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(paste);
-      } catch {
-        throw new Error('That isn’t valid JSON. Example: {"steps": 9336, "sleep": 7.6}');
-      }
+      // Tolerant of the corruptions a phone paste introduces (curly quotes,
+      // non-breaking spaces, a stray code fence) and explicit about what it
+      // repaired, so a Shortcut that keeps producing them can be fixed at
+      // source rather than silently patched on every import.
+      const parse = parseLenientJson(paste);
+      if (!parse.ok) throw new Error(parse.error);
+      const parsed = parse.value;
+      const repairNotes = parse.repairs;
       const res = await fetch('/api/health-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -106,7 +109,12 @@ export default function HealthConnector({ refresh }: { refresh: () => Promise<vo
       // tells you something went wrong and nothing about what, which is barely
       // better than silence. Each skipped key is shown with why it was skipped,
       // and anything skipped makes this a warning rather than a success.
-      setMsgDetail(r.ignored.map((i) => `${i.key} — ${i.reason}`));
+      setMsgDetail([
+        // Repairs first: they explain why an import that "worked" still needs
+        // attention in the Shortcut that produced it.
+        ...repairNotes.map((n) => `fixed on the way in — ${n}`),
+        ...r.ignored.map((i) => `${i.key} — ${i.reason}`),
+      ]);
       setMsg(summary);
       setMsgIsWarning(r.ignored.length > 0);
       if (r.ignored.length === 0) setPaste('');
