@@ -5,7 +5,7 @@
 // the useDashboard hook; tab state lives in React state.
 
 import { useEffect, useState } from 'react';
-import { formatDateLong, todayISO } from '@/lib/dates';
+import { formatDateLong, isoWeek, isoWeekYear, isoWeeksInYear, todayISO } from '@/lib/dates';
 import { useDashboard } from './components/useDashboard';
 import { weeklyScore } from './components/data';
 import Today from './components/tabs/Today';
@@ -82,6 +82,12 @@ export default function Page() {
 
   const today = todayISO();
   const score = weeklyScore(dash.metrics, dash.entries, today);
+  // ISO week of the year. Shown as "Week 33/53": the denominator is this
+  // week-numbering year's real length, which is 53 in a long year such as 2026
+  // — a fixed "/52" would be wrong for one week out of every long year.
+  const week = isoWeek(today);
+  const weekYear = isoWeekYear(today);
+  const weeksThisYear = isoWeeksInYear(weekYear);
   const inbox = dash.syncState.todayInboxCount;
   const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0];
 
@@ -98,6 +104,14 @@ export default function Page() {
             </p>
             <span
               className="rounded-full border px-2 py-px text-[10.5px]"
+              style={{ borderColor: 'var(--gold-dim)', color: 'var(--gold)' }}
+              title={`ISO week ${week} of ${weeksThisYear} in ${weekYear}`}
+              suppressHydrationWarning
+            >
+              Week {week}/{weeksThisYear}
+            </span>
+            <span
+              className="rounded-full border px-2 py-px text-[10.5px]"
               style={{ borderColor: 'var(--hairline)', color: 'var(--faint)' }}
               title="Today's Gmail inbox count — updates when you sync Google"
             >
@@ -105,7 +119,14 @@ export default function Page() {
             </span>
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-center gap-1" title="Weekly score">
+        {/* The circle is a 0–100 score, so it is labelled SCORE. It used to read
+            "Week", which invited it to be read as a week-of-year counter — a
+            number that never matched the calendar because it never was one.
+            The actual week number now sits beside the date, where it belongs. */}
+        <div
+          className="flex shrink-0 flex-col items-center gap-1"
+          title={`Weekly score: ${score}% of active metrics meeting their goal over the last 7 days`}
+        >
           <div
             className="grid h-12 w-12 place-items-center rounded-full border"
             style={{ borderColor: 'var(--gold-dim)' }}
@@ -115,7 +136,7 @@ export default function Page() {
             </span>
           </div>
           <span className="text-[9.5px] uppercase tracking-[0.14em] text-[color:var(--faint)]">
-            Week
+            Score
           </span>
         </div>
       </header>

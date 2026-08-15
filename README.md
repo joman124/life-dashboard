@@ -83,7 +83,7 @@ On localhost an unset `APP_PASSWORD` means no gate at all, because typing a pass
 npm test
 ```
 
-235 tests cover the logic that's easy to break silently: correlation math and its 8-paired-points floor, streak rules, direction-aware deltas, local-date arithmetic across DST and leap days, health-payload matching, token verification, session-token derivation, and import validation.
+336 tests cover the logic that's easy to break silently: correlation math and its 8-paired-points floor, streak rules, direction-aware deltas, local-date arithmetic across DST and leap days, ISO week numbering (including 53-week years), health-payload matching and duration parsing, tolerant JSON repair, OAuth error classification, token verification, session-token derivation, and import validation.
 
 ```bash
 npm run test:coverage
@@ -343,19 +343,29 @@ A **Screen Time** metric (📱, goal ≤ 3h/day) is set up for you. Reading the 
 
 ### Logging Screen Time with one tap
 
-This Shortcut can't read Screen Time (nothing can), so instead it **opens Screen Time for you, asks for the number, and posts it**. You read one figure and type it; the Shortcut does the rest. It takes about five seconds a day.
+This Shortcut can't read Screen Time (nothing can), so it **asks you for the number and posts it**. You read one figure and type it; the Shortcut does the rest.
+
+> **Don't add an "Open App → Settings" action.** An earlier version of these instructions did, on the theory that it saved you a tap. It doesn't: it throws you out of whatever you were doing, drops you at the *root* of Settings rather than at Screen Time, and leaves the text prompt floating over the wrong screen while you go hunting for the number. Read the figure first, then run the Shortcut. The widget below makes that a glance.
+
+**Part 0 — put the number where you can see it**
+
+Do this once, and you never need to open Settings for it again:
+
+1. On your iPhone, long-press an empty part of the Home Screen until the icons jiggle.
+2. Tap the **+** in the top-left corner.
+3. Search for `Screen Time` and tap it.
+4. Swipe to the widget size you want and tap **Add Widget**.
+5. Tap **Done**. Today's total is now on your Home Screen, updated automatically.
 
 **Part 1 — build the Shortcut**
 
 1. On your iPhone, open the **Shortcuts** app.
 2. Tap the **+** in the top-right corner to create a new shortcut.
-3. Tap **Add Action**. In the search box, type `Open App`, then tap the **Open App** action in the results.
-4. In the action that appears, tap the blue **App** placeholder, search for `Settings`, and select it. (This puts you one tap from the number.)
-5. Tap **Add Action** again. Search for `Ask for Input` and tap it.
-6. In that action, tap the text next to **Prompt** and type: `Screen Time today?`
-7. On the same action, tap **Text** next to **Input Type** and change it to **Text**. Leave it as Text — not Number — so you can type `3h 24m` exactly as your phone shows it.
-8. Tap **Add Action**. Search for `Text` and tap the plain **Text** action.
-9. Type this into the Text box exactly, including the braces and quotes, but **stop before typing the last `}`**:
+3. Tap **Add Action**. Search for `Ask for Input` and tap it.
+4. In that action, tap the text next to **Prompt** and type: `Screen Time today?`
+5. On the same action, tap **Text** next to **Input Type** and confirm it is **Text** — not Number — so you can type `3h 24m` exactly as your phone shows it.
+6. Tap **Add Action**. Search for `Text` and tap the plain **Text** action.
+7. Type this into the Text box exactly, including the braces and quotes, but **stop before typing the last `}`**:
    ```
    {"screenTime": "
    ```
@@ -364,15 +374,15 @@ This Shortcut can't read Screen Time (nothing can), so instead it **opens Screen
    "}
    ```
    The finished line reads `{"screenTime": "▸Provided Input◂"}`.
-10. Tap **Add Action**. Search for `Get Contents of URL` and tap it.
-11. Paste your webhook URL into the **URL** field. Get it from the app: **⚙ Track → Connectors → Apple Health → Webhook URL → Copy**.
-12. On that same action, tap the **▸** arrow to expand its options.
-13. Tap **Method** and change it from `GET` to **POST**.
-14. Tap **Headers**, then **Add new header**. For the key type `Authorization`, and for the value type `Bearer ` followed by your token — copy the token from **⚙ Track → Connectors → Apple Health → Bearer token → Copy**. The value must look like `Bearer abc123…`, with a single space after the word Bearer.
-15. Add a second header: key `Content-Type`, value `application/json`.
-16. Tap **Request Body** and choose **File**. Then tap the body field and select the **Text** variable from step 9.
-17. Tap the shortcut's name at the top, choose **Rename**, and call it `Log Screen Time`.
-18. Tap **Done** in the top-right.
+8. Tap **Add Action**. Search for `Get Contents of URL` and tap it.
+9. Paste your webhook URL into the **URL** field. Get it from the app: **⚙ Track → Connectors → Apple Health → Webhook URL → Copy**.
+10. On that same action, tap the **▸** arrow to expand its options.
+11. Tap **Method** and change it from `GET` to **POST**.
+12. Tap **Headers**, then **Add new header**. For the key type `Authorization`, and for the value type `Bearer ` followed by your token — copy the token from **⚙ Track → Connectors → Apple Health → Bearer token → Copy**. The value must look like `Bearer abc123…`, with a single space after the word Bearer.
+13. Add a second header: key `Content-Type`, value `application/json`.
+14. Tap **Request Body** and choose **File**. Then tap the body field and select the **Text** variable from step 7.
+15. Tap the shortcut's name at the top, choose **Rename**, and call it `Log Screen Time`.
+16. Tap **Done** in the top-right.
 
 > **iOS turns your quotes curly, and JSON doesn't accept curly quotes.** Smart Punctuation rewrites `"` as `“` and `”` as you type — in the Shortcuts Text action, in Safari, everywhere. The two characters look nearly identical, so this is invisible until the import fails. The app repairs it automatically and tells you it did, so your Shortcut will work either way; to stop it at source, turn the setting off:
 >
@@ -384,10 +394,10 @@ This Shortcut can't read Screen Time (nothing can), so instead it **opens Screen
 
 **Part 2 — test it before automating**
 
-19. Tap your new **Log Screen Time** shortcut to run it. Settings opens.
-20. In Settings, tap **Screen Time**, then tap **See All App & Website Activity**. The big number at the top of the **Day** tab is today's total — something like `3h 24m`.
-21. Swipe back to the Shortcut prompt (or reopen Shortcuts if it closed) and type that number in exactly as shown, e.g. `3h 24m`. Tap **Done**.
-22. Open Life Dashboard and check the **Today** tab. Screen Time should show the value you typed — `3h 24m` appears as `3.4h`. **If it doesn't**, open **⚙ Track → Connectors → Apple Health** and use the **Manual import** box to paste `{"screenTime": "3h 24m"}` and tap Import; the result line will name the exact problem.
+17. Look at the **Screen Time widget** on your Home Screen and note today's total, e.g. `3h 24m`. (No widget? Tap **Settings → Screen Time → See All App & Website Activity**; the big number at the top of the **Day** tab is it.)
+18. Tap your new **Log Screen Time** shortcut. A text box appears asking `Screen Time today?` — and nothing else happens, which is the point: it does not navigate anywhere.
+19. Type the number exactly as shown, e.g. `3h 24m`, and tap **Done**.
+20. Open Life Dashboard and check the **Today** tab. Screen Time should show the value you typed — `3h 24m` appears as `3.4h`. **If it doesn't**, open **⚙ Track → Connectors → Apple Health** and use the **Manual import** box to paste `{"screenTime": "3h 24m"}` and tap Import; the result line will name the exact problem.
 
 **Part 3 — get reminded each evening**
 
