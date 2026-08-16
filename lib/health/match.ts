@@ -76,6 +76,12 @@ function coerceNumber(value: unknown, unit?: string): number | null {
   return null;
 }
 
+/**
+ * Names Shortcuts gives its variables. A metric value is never legitimately one
+ * of these, so seeing one means the token wasn't inserted.
+ */
+const SHORTCUT_PLACEHOLDER = /^(provided input|ask for input|shortcut input|current date|text)$/i;
+
 /** Short, quoted echo of a rejected value so the reason names what was sent. */
 function echoValue(value: unknown): string {
   if (typeof value !== 'string') return String(value);
@@ -95,6 +101,13 @@ function unreadableReason(value: unknown, metricName: string, unit?: string): st
   // one you fix in the Shortcut rather than in what you typed.
   if (typeof value === 'string' && value.trim() === '') {
     return 'empty value — the Shortcut sent this key with nothing in it';
+  }
+  // The literal NAME of a Shortcuts variable, rather than its value. This means
+  // the variable token was never inserted — the words were typed as plain text
+  // — which is the single easiest mistake to make when hand-building the JSON
+  // in a Text action, and impossible to spot from the value alone.
+  if (typeof value === 'string' && SHORTCUT_PLACEHOLDER.test(value.trim())) {
+    return `received the words ${echoValue(value)} instead of a number — the Shortcuts variable was typed as text rather than inserted as a blue token`;
   }
   if (typeof value === 'string' && looksLikeDuration(value.trim())) {
     if (isTimeUnit(unit)) {

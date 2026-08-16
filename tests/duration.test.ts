@@ -164,3 +164,28 @@ describe('matchHealthPayload — duration strings', () => {
     ]);
   });
 });
+
+describe('matchHealthPayload — Shortcuts wiring mistakes', () => {
+  const METRICS = [{ id: 'screen-time', name: 'Screen Time', unit: 'h' }];
+  const DATE = '2026-08-16';
+
+  test('names the mistake when a variable was typed instead of inserted', () => {
+    for (const literal of ['Provided Input', 'provided input', 'Ask for Input', 'Text']) {
+      const r = matchHealthPayload({ 'screen-time': literal }, METRICS, DATE);
+      expect(r.imported).toHaveLength(0);
+      expect(r.ignored[0].reason).toContain('typed as text rather than inserted');
+    }
+  });
+
+  test('does not mistake a real duration for a placeholder', () => {
+    expect(matchHealthPayload({ 'screen-time': '3h 24m' }, METRICS, DATE).imported).toHaveLength(1);
+  });
+
+  test('tolerates a trailing space inside the quotes', () => {
+    // {"screenTime": "<var> "} — a stray space before the closing quote is easy
+    // to leave in when hand-building the JSON, and harmless.
+    expect(matchHealthPayload({ 'screen-time': '3h 24m ' }, METRICS, DATE).imported[0]).toMatchObject(
+      { value: 3.4 },
+    );
+  });
+});

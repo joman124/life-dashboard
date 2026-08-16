@@ -83,7 +83,7 @@ On localhost an unset `APP_PASSWORD` means no gate at all, because typing a pass
 npm test
 ```
 
-336 tests cover the logic that's easy to break silently: correlation math and its 8-paired-points floor, streak rules, direction-aware deltas, local-date arithmetic across DST and leap days, ISO week numbering (including 53-week years), health-payload matching and duration parsing, tolerant JSON repair, OAuth error classification, token verification, session-token derivation, and import validation.
+419 tests cover the logic that's easy to break silently: correlation math and its 8-paired-points floor, streak rules, direction-aware deltas, local-date arithmetic across DST and leap days, ISO week numbering (including 53-week years), health-payload matching and duration parsing, tolerant JSON repair, OAuth error classification, token verification, session-token derivation, and import validation.
 
 ```bash
 npm run test:coverage
@@ -359,54 +359,54 @@ Do this once, and you never need to open Settings for it again:
 
 **Part 1 — build the Shortcut**
 
+Four actions, and you never type a brace or a quote. That matters: hand-building the JSON in a **Text** action is what invites curly quotes, missing variables, and stray characters. Letting Shortcuts build the body removes the whole class of problem.
+
 1. On your iPhone, open the **Shortcuts** app.
 2. Tap the **+** in the top-right corner to create a new shortcut.
 3. Tap **Add Action**. Search for `Ask for Input` and tap it.
-4. In that action, tap the text next to **Prompt** and type: `Screen Time today?`
-5. On the same action, tap **Text** next to **Input Type** and confirm it is **Text** — not Number — so you can type `3h 24m` exactly as your phone shows it.
-6. Tap **Add Action**. Search for `Text` and tap the plain **Text** action.
-7. Type this into the Text box exactly, including the braces and quotes, but **stop before typing the last `}`**:
-   ```
-   {"screenTime": "
-   ```
-   Now tap the **Provided Input** / **Ask for Input** variable from the suggestion bar just above the keyboard, so it gets inserted as a blue token. Then finish the line by typing:
-   ```
-   "}
-   ```
-   The finished line reads `{"screenTime": "▸Provided Input◂"}`.
-8. Tap **Add Action**. Search for `Get Contents of URL` and tap it.
-9. Paste your webhook URL into the **URL** field. Get it from the app: **⚙ Track → Connectors → Apple Health → Webhook URL → Copy**.
-10. On that same action, tap the **▸** arrow to expand its options.
-11. Tap **Method** and change it from `GET` to **POST**.
-12. Tap **Headers**, then **Add new header**. For the key type `Authorization`, and for the value type `Bearer ` followed by your token — copy the token from **⚙ Track → Connectors → Apple Health → Bearer token → Copy**. The value must look like `Bearer abc123…`, with a single space after the word Bearer.
-13. Add a second header: key `Content-Type`, value `application/json`.
-14. Tap **Request Body** and choose **File**. Then tap the body field and select the **Text** variable from step 7.
+4. Tap the text next to **Prompt** and type: `Screen Time today?`
+5. On the same action, check **Input Type** is **Text** — not Number. This is what lets you type `3h 24m` rather than converting it to a decimal in your head.
+6. Tap **Add Action**. Search for `Get Contents of URL` and tap it.
+7. Paste your webhook URL into the **URL** field. Get it from the app: **⚙ Track → Connectors → Apple Health → Webhook URL → Copy**.
+8. Tap the **▸** arrow on that action to expand its options.
+9. Tap **Method** and change it from `GET` to **POST**.
+10. Tap **Headers**, then **Add new header**. Key: `Authorization`. Value: the word `Bearer`, one space, then your token from **⚙ Track → Connectors → Apple Health → Bearer token → Copy**. It must read `Bearer abc123…`.
+11. Tap **Request Body** and choose **JSON**. (Not Form, not File.)
+12. Tap **Add new field** and set its type to **Text**.
+13. For the field's **Key**, type: `screenTime`
+14. Tap the field's **Value** box, then tap **Provided Input** in the suggestion bar above the keyboard so it inserts as a blue token. **Do not type the words** — if the value shows as plain text rather than a blue capsule, the import will report exactly that and nothing will be logged.
 15. Tap the shortcut's name at the top, choose **Rename**, and call it `Log Screen Time`.
 16. Tap **Done** in the top-right.
 
-> **iOS turns your quotes curly, and JSON doesn't accept curly quotes.** Smart Punctuation rewrites `"` as `“` and `”` as you type — in the Shortcuts Text action, in Safari, everywhere. The two characters look nearly identical, so this is invisible until the import fails. The app repairs it automatically and tells you it did, so your Shortcut will work either way; to stop it at source, turn the setting off:
->
-> 1. Open the **Settings** app.
-> 2. Tap **General**.
-> 3. Tap **Keyboard**.
-> 4. Scroll to **Smart Punctuation** and turn the toggle **off**.
-> 5. Go back into your Shortcut's **Text** action, delete the quote characters, and retype them — existing curly ones don't change retroactively.
+Choosing **JSON** as the body type sets `Content-Type: application/json` for you, so there is no second header to add.
 
-**Part 2 — test it before automating**
+**Part 2 — test it, and see what the server says**
 
-17. Look at the **Screen Time widget** on your Home Screen and note today's total, e.g. `3h 24m`. (No widget? Tap **Settings → Screen Time → See All App & Website Activity**; the big number at the top of the **Day** tab is it.)
-18. Tap your new **Log Screen Time** shortcut. A text box appears asking `Screen Time today?` — and nothing else happens, which is the point: it does not navigate anywhere.
+17. Look at the **Screen Time widget** on your Home Screen and note today's total, e.g. `3h 24m`. (No widget? **Settings → Screen Time → See All App & Website Activity**; the big number at the top of the **Day** tab.)
+18. Tap your **Log Screen Time** shortcut. A text box appears asking `Screen Time today?` and nothing else happens — it does not navigate anywhere.
 19. Type the number exactly as shown, e.g. `3h 24m`, and tap **Done**.
-20. Open Life Dashboard and check the **Today** tab. Screen Time should show the value you typed — `3h 24m` appears as `3.4h`. **If it doesn't**, open **⚙ Track → Connectors → Apple Health** and use the **Manual import** box to paste `{"screenTime": "3h 24m"}` and tap Import; the result line will name the exact problem.
+20. Open Life Dashboard → **Today**. Screen Time should read **3.4h**.
+
+**If it didn't land**, add one action and run it again — this is the fastest way to see the cause:
+
+21. In the Shortcut, tap **Add Action**, search for `Quick Look`, and add it at the very end (after Get Contents of URL).
+22. Run the Shortcut again. Quick Look shows the server's reply verbatim, which names the problem rather than just failing:
+    - `"imported":[{"metricId":"screen-time","value":3.4}]` — it worked.
+    - `no matching metric` — the Screen Time metric isn't in your database; check **⚙ Track**.
+    - `empty value — the Shortcut sent this key with nothing in it` — step 14: the variable is missing from the Value box.
+    - `received the words "Provided Input" instead of a number` — step 14: you typed the variable's name instead of inserting the blue token.
+    - `could not read "…" as a duration` — the text isn't a recognised form; see the table below.
+    - `Invalid or missing bearer token` — step 10: the header value is wrong, or you rotated the token since.
+23. Once it works, delete the **Quick Look** action (swipe left on it → **Delete**) so the Shortcut runs silently.
 
 **Part 3 — get reminded each evening**
 
-23. In the Shortcuts app, tap the **Automation** tab at the bottom.
-24. Tap **+** in the top-right, then tap **Time of Day**.
-25. Set the time to **9:00 PM**, choose **Daily**, and tap **Next**.
-26. Tap **Run Shortcut**, then select **Log Screen Time**.
-27. Leave **Ask Before Running** turned **on** for this one — unlike the morning health sync, this Shortcut needs you present to type the number, so a silent 9pm run would do nothing.
-28. Tap **Done**.
+24. In the Shortcuts app, tap the **Automation** tab at the bottom.
+25. Tap **+** in the top-right, then tap **Time of Day**.
+26. Set the time to **9:00 PM**, choose **Daily**, and tap **Next**.
+27. Tap **Run Shortcut**, then select **Log Screen Time**.
+28. Leave **Ask Before Running** turned **on** for this one — unlike the morning health sync, this Shortcut needs you present to type the number, so a silent 9pm run would do nothing.
+29. Tap **Done**.
 
 **What the app accepts for Screen Time.** Any of these work, so you can type whatever's on screen without converting anything:
 
@@ -435,7 +435,8 @@ The same parsing applies to any metric measured in hours or minutes, so Sleep ta
 | **"That isn't valid JSON"** in the paste box | Almost always a character you can't see. Copying from a web page or chat brings **curly quotes** (`“ ”`) instead of straight ones, and phone keyboards insert **non-breaking spaces** that look exactly like spaces. Both are rejected by JSON. The app now repairs these automatically and lists what it fixed under the result — if you still get this error, the message names the position and the offending character. Retype the line by hand using straight `"` quotes rather than pasting it again. |
 | **`no matching metric`** against `screenTime` | The Screen Time metric isn't in your database — this is not a formatting problem, and no amount of retyping the duration will fix it. Open **⚙ Track** and look for **Screen Time** in the metric list. If it's absent, you're running a build from before it was added: pull the latest code and restart the server (deployed, redeploy). The metric is created automatically on the next startup. If you deleted it on purpose, re-add it in Track → Add your own: name `Screen Time`, unit **hours**, goal **at most** `3`. |
 | **`could not read "…" as a duration`** | The text couldn't be parsed. Use one of the accepted forms — `3h 24m`, `3 hr, 24 min`, `3:24`, `204m`, or `3.4`. Phrases like `about 3 hours` are refused rather than guessed at, on purpose. |
-| **`empty value — the Shortcut sent this key with nothing in it`** | The Shortcut posted the key with no value. Open the Shortcut and check the **Text** action (step 9): the **Provided Input** variable must sit *inside* the quotes as a blue token. If you typed the words "Provided Input" by hand, delete them and re-insert the variable from the suggestion bar above the keyboard. |
+| **`empty value — the Shortcut sent this key with nothing in it`** | The Shortcut posted the key with no value. Open the Shortcut, expand **Get Contents of URL → Request Body**, and check the field's **Value** box holds the **Provided Input** variable as a blue token. An empty Value box sends an empty string. |
+| **`received the words "Provided Input" instead of a number`** | The variable's *name* was typed as plain text rather than inserted as a token. Clear the Value box, then tap **Provided Input** in the suggestion bar above the keyboard — it should appear as a blue capsule, not as letters you can edit character by character. |
 | **`"9h" looks like a duration, but … is measured in count`** | You sent a duration to a metric that isn't measured in time. Either send a plain number, or change the metric's unit to hours in **⚙ Track**. |
 | Mood didn't update from Journal | Check the `ignored` list in the response. `state of mind must be a valence between -1 and 1` means the Shortcut sent a 1–10 score under the `stateOfMind` key — either send the raw **Valence** detail, or switch the key to `mood`. `no Mood metric` means the Mood metric was deleted; re-add it in Track (name it `Mood`, score out of 10). Also confirm the Journal entry exists for that date — Health → Browse → State of Mind. |
 | Inbox count isn't updating | Click **Sync now** manually. The count reflects threads from the current local day as of the last sync, not live. |
