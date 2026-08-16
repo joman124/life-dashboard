@@ -44,6 +44,18 @@ function extractToken(req: Request): string | null {
   return qp && qp.length > 0 ? qp : null;
 }
 
+/**
+ * Does this text read as `key=value&key=value`? Used only after a JSON parse has
+ * already failed, to recognise a form body whose Content-Type didn't announce
+ * itself. Deliberately strict — every segment must be a real `key=` pair — so
+ * prose or broken JSON is never mistaken for form data.
+ */
+function looksFormEncoded(raw: string): boolean {
+  const s = raw.trim();
+  if (s === '' || s.startsWith('{') || s.startsWith('[')) return false;
+  return s.split('&').every((pair) => /^[^=&\s]+=[^=&]*$/.test(pair));
+}
+
 export async function POST(req: Request) {
   try {
     // --- auth ---
@@ -53,32 +65,49 @@ export async function POST(req: Request) {
     }
 
     // --- body ---
-    // Parsed leniently rather than with req.json(): the Shortcut's Text action
-    // is typed on an iOS keyboard, where Smart Punctuation silently turns " into
-    // curly quotes and breaks the JSON. A strict parse is still tried first, so
-    // a well-formed body is never altered; repairs are reported back so a
-    // Shortcut producing them can be corrected instead of relied on.
-    const rawBody = await req.text().catch(() => '');
-
-    // Form-encoded bodies are accepted as well as JSON. Not for API tidiness:
-    // in the iOS Shortcuts UI, "Request Body: Form" is a flat list of key/value
-    // rows where dropping a variable into the value is one tap, whereas the
-    // JSON body editor nests the value behind a field-type picker and silently
-    // accepts an empty box. Offering both means a user who cannot get the
-    // variable to stick in one editor has a working alternative rather than a
-    // dead end.
+    // Three encodings are accepted, because the iOS Shortcuts "Request Body"
+    // picker offers three and each one fails differently:
+    //
+    //   JSON      — hand-typed in a Text action, where Smart Punctuation turns
+    //               " into curly quotes; parsed leniently for that reason.
+    //   Form      — a flat key/value list, far easier to drop a variable into,
+    //               and sent as EITHER url-encoded or multipart depending on
+    //               iOS version and field types. Both are handled.
+    //
+    // Guessing wrong here produces "that isn't valid JSON" against a body that
+    // was perfectly well-formed, just not JSON — a dead end for anyone who
+    // followed the Form instructions.
     let body: unknown;
     let repairs: string[] = [];
-    const contentType = req.headers.get('content-type') ?? '';
-    if (contentType.includes('application/x-www-form-urlencoded')) {
-      body = Object.fromEntries(new URLSearchParams(rawBody));
+    const contentType = (req.headers.get('content-type') ?? '').toLowerCase();
+    const isForm =
+      contentType.includes('application/x-www-form-urlencoded') ||
+      contentType.includes('multipart/form-data');
+
+    if (isForm) {
+      // formData() covers url-encoded and multipart alike. File parts are
+      // skipped: a metric value is always a scalar.
+      const form = await req.formData();
+      const flat: Record<string, string> = {};
+      for (const [k, v] of form.entries()) {
+        if (typeof v === 'string') flat[k] = v;
+      }
+      body = flat;
     } else {
+      const rawBody = await req.text().catch(() => '');
       const parse = parseLenientJson(rawBody);
-      if (!parse.ok) {
+      if (parse.ok) {
+        body = parse.value;
+        repairs = parse.repairs;
+      } else if (looksFormEncoded(rawBody)) {
+        // Form data sent WITHOUT a matching Content-Type — some Shortcuts
+        // configurations do this. The shape is unambiguous, so honour it
+        // rather than rejecting a body whose meaning is perfectly clear.
+        body = Object.fromEntries(new URLSearchParams(rawBody.trim()));
+        repairs = ['read the body as form data — its Content-Type did not say so'];
+      } else {
         return jsonError(parse.error, 400);
       }
-      body = parse.value;
-      repairs = parse.repairs;
     }
 
     if (body === null || typeof body !== 'object' || Array.isArray(body)) {

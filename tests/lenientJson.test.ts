@@ -137,3 +137,38 @@ describe('form-encoded payload shape', () => {
     expect(Object.fromEntries(new URLSearchParams('screenTime='))).toEqual({ screenTime: '' });
   });
 });
+
+/**
+ * The route's fallback heuristic for a form body whose Content-Type didn't say
+ * so. Mirrors looksFormEncoded in app/api/health-import/route.ts — kept in step
+ * with it by these cases, which pin the boundary between "clearly form data"
+ * and "broken JSON that must still be reported as broken".
+ */
+function looksFormEncoded(raw: string): boolean {
+  const s = raw.trim();
+  if (s === '' || s.startsWith('{') || s.startsWith('[')) return false;
+  return s.split('&').every((pair) => /^[^=&\s]+=[^=&]*$/.test(pair));
+}
+
+describe('form-body detection without a Content-Type', () => {
+  test('recognises real form bodies', () => {
+    expect(looksFormEncoded('screenTime=3h+24m')).toBe(true);
+    expect(looksFormEncoded('screenTime=2%3A15&steps=9336')).toBe(true);
+    expect(looksFormEncoded('screenTime=')).toBe(true); // empty value is still a pair
+  });
+
+  test('never claims JSON, however broken', () => {
+    // Broken JSON must keep reporting as broken JSON rather than being
+    // silently reinterpreted as a form field.
+    expect(looksFormEncoded('{"screenTime": "3h 24m"}')).toBe(false);
+    expect(looksFormEncoded('{"steps": 9336,}')).toBe(false);
+    expect(looksFormEncoded('[1,2,3]')).toBe(false);
+  });
+
+  test('never claims prose or empty input', () => {
+    expect(looksFormEncoded('screen time was about three hours')).toBe(false);
+    expect(looksFormEncoded('3h 24m')).toBe(false);
+    expect(looksFormEncoded('')).toBe(false);
+    expect(looksFormEncoded('   ')).toBe(false);
+  });
+});

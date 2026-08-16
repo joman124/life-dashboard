@@ -83,7 +83,7 @@ On localhost an unset `APP_PASSWORD` means no gate at all, because typing a pass
 npm test
 ```
 
-421 tests cover the logic that's easy to break silently: correlation math and its 8-paired-points floor, streak rules, direction-aware deltas, local-date arithmetic across DST and leap days, ISO week numbering (including 53-week years), health-payload matching and duration parsing, tolerant JSON repair, OAuth error classification, token verification, session-token derivation, and import validation.
+424 tests cover the logic that's easy to break silently: correlation math and its 8-paired-points floor, streak rules, direction-aware deltas, local-date arithmetic across DST and leap days, ISO week numbering (including 53-week years), health-payload matching and duration parsing, tolerant JSON repair, OAuth error classification, token verification, session-token derivation, and import validation.
 
 ```bash
 npm run test:coverage
