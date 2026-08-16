@@ -251,37 +251,38 @@ These steps assume you have the **Shortcuts** app on your iPhone (it comes pre-i
 
 ### Add your Journal mood (State of Mind)
 
-When you tap a face in the **Journal** app's daily reflection — or use **Log your State of Mind** in the Health app — iOS writes a **State of Mind** sample to HealthKit. Shortcuts can read it, so your mood rating rides in on the same webhook as steps and sleep and feeds the **Mood** metric (🙂, goal ≥ 7/10), which is set up for you.
+**Stock Shortcuts cannot read State of Mind data.** Apple's Shortcuts app has an action to *log* a mood into Health (`Log State of Mind`), but as of this iOS version there is no `Find State of Mind Samples` or equivalent *read* action — so a Shortcut cannot pull the face you tapped in Journal back out automatically. (Third-party apps like Emocore add this via a private API, but that means trusting an unreviewed app with Health data, which this guide doesn't recommend.) The reliable, all-stock-actions approach is a Shortcut that asks you to pick your mood — one tap — and posts that instead of trying to read Journal.
 
-**The scale is the thing to know.** HealthKit doesn't store the face you tapped; it stores **valence**, a number from **-1.0** (very unpleasant) to **+1.0** (very pleasant). That is not a 1–10 score — posted raw, a perfectly neutral day (valence `0`) would land as 0/10, the worst day on record. So the app converts it for you, and **which key you use decides how the number is read**:
+The **Mood** metric (🙂, goal ≥ 7/10) is already set up to receive it. **The scale is the thing to know**: the webhook accepts either a HealthKit-style **valence** (-1.0 to +1.0, or one of the seven mood labels) *or* a plain 1–10 score, and which key you use decides how the number is read:
 
 | You send | Interpreted as | Stored |
 |---|---|---|
+| `{"stateOfMind": "Pleasant"}` | one of the 7 valence labels | Mood **8.2** /10 |
 | `{"stateOfMind": 0.6}` | valence, -1 → +1 | Mood **8.2** /10 |
 | `{"stateOfMind": 0}` | valence | Mood **5.5** /10 |
-| `{"stateOfMind": -1}` | valence | Mood **1** /10 |
 | `{"mood": 8}` | a 1–10 score already | Mood **8** /10 |
 
-Add these actions to the Shortcut you built above:
+Build a **new, separate Shortcut** for this (name it "Log Mood") — don't try to fold it into the steps/sleep Shortcut, since this one needs a moment of your attention and that one doesn't:
 
-1. Add a **Find State of Mind Samples** action (Shortcuts → search "State of Mind"). Set **Date** to **Today**. If you keep both daily reflections and momentary check-ins, filter **Kind** to **Daily** to get just the Journal reflection — otherwise leave it, and several check-ins in one day are averaged for you.
-2. Follow it with **Get Details of State of Mind** → **Valence**, and set the result to a variable named `Mood`.
-3. Extend the **Text** action's JSON with the new variable:
-   ```json
-   {"steps": [Steps], "sleep": [Sleep], "stateOfMind": [Mood]}
-   ```
+1. Open Shortcuts → **+** → **New Shortcut**.
+2. Add a **List** action (search "List"). Tap **Add New Item** six times so you have 7 rows, then tap into each row and type, in order: `Very Unpleasant`, `Unpleasant`, `Slightly Unpleasant`, `Neutral`, `Slightly Pleasant`, `Pleasant`, `Very Pleasant` — the same seven labels Journal shows as faces.
+3. Add a **Choose from List** action (search "Choose from List") right after it. Tap its **List** input and select the **List** action's output from Step 2. Tap **Show More** and set **Prompt** to `How are you feeling today?`.
+4. Add a **Text** action. In the text box, type `{"stateOfMind": "` then tap inside the box again where the value goes, tap the small variable icon above the keyboard, and insert the **Choose from List** result (often labeled "Chosen Item"). Finish typing `"}` after it, so the finished text reads like `{"stateOfMind": "Chosen Item"}` with "Chosen Item" being the inserted blue variable chip, not typed text.
+5. Add a **Get Contents of URL** action:
+   - **URL**: your import URL from [Get your import token](#get-your-import-token) (ending in `/api/health-import`)
+   - Tap **Show More** → **Method**: `POST`
+   - **Headers**: `Authorization` = `Bearer <your token>`, and `Content-Type` = `application/json`
+   - **Request Body**: `JSON`, set to the output of the **Text** action from Step 4
+6. Add a **Show Result** action at the end so you can see the response when testing.
+7. Tap the shortcut's name at the top and rename it **Log Mood**. Tap **Done**.
 
-That's it — the **Get Contents of URL** action is unchanged.
+Run it once by tapping it in the Shortcuts list: it should prompt you with the 7 options, and after picking one, **Show Result** should display something like `"imported":[{"metricId":"mood","value":8.2,"note":"valence 0.571 → 8.2/10"}]`.
 
-Three things make this forgiving, because the exact Shortcuts actions differ between iOS versions:
+Every converted value explains itself in the response — `"note": "valence 0.6 → 8.2/10"` — and the same note appears in the Connectors panel after a manual import, so a number you didn't expect is always traceable back to what you tapped.
 
-- **Labels work too.** If your Shortcut yields the label rather than the number, send it as-is — `{"stateOfMind": "Very Pleasant"}` — and any of the seven ratings (`Very Unpleasant` … `Very Pleasant`) is accepted, in any casing or spacing.
-- **Lists are averaged.** `Find State of Mind Samples` returns a *list*. If you pass it straight through — `{"stateOfMind": [0.2, 0.6]}` — the mean is used, so you don't need a **Calculate Statistics** action for a day with several check-ins.
-- **A wrong scale is refused, not guessed.** Sending `{"stateOfMind": 8}` imports nothing and reports `state of mind must be a valence between -1 and 1` in the `ignored` list, rather than quietly recording a bogus perfect day. If you genuinely want to log a 1–10 number, use the `mood` key.
+**Skipped a day?** Nothing is sent and nothing is written — the metric has no value for that date, which counts as "not logged" rather than as a zero. Averages and correlations skip unlogged days entirely, so a gap never drags the numbers down. Streaks are stricter: an unlogged *past* day breaks the streak exactly as a missed goal would, though an unlogged **today** doesn't (it's skipped until you log it).
 
-Every converted value explains itself in the response — `"note": "valence 0.6 → 8.2/10"` — and the same note appears in the Connectors panel after a manual import, so a number you didn't expect is always traceable back to what your phone actually sent.
-
-**No Journal entry that day?** Nothing is sent and nothing is written — the metric has no value for that date, which counts as "not logged" rather than as a zero. Averages and correlations skip unlogged days entirely, so a gap never drags the numbers down. Streaks are stricter: an unlogged *past* day breaks the streak exactly as a missed goal would, though an unlogged **today** doesn't (it's skipped until you log it). If you keep a Mood streak, log the day in Journal before midnight.
+This Shortcut still needs your one tap to pick a mood — it isn't silent like the steps/sleep sync. [Automate it](#automate-it) below with "Ask Before Running" off, and the only thing you'll see each evening is the picker itself, not an extra confirmation first.
 
 ### Automate it
 
@@ -289,10 +290,10 @@ A Shortcut you have to tap every morning isn't really automatic — this last st
 
 1. In the Shortcuts app, go to **Automation → +** → **Create Personal Automation**.
 2. Choose **Time of Day**, set it to your preferred morning time (e.g., 7:00 AM), and set it to repeat daily.
-3. Set the action to **Run Shortcut**, and select the Shortcut you just built.
+3. Set the action to **Run Shortcut**, and select the Shortcut you just built (**Log Health**, **Log Mood**, or **Log Screen Time** — repeat this whole Automate section once per Shortcut, since Mood and Screen Time need their own reminder time and can't run silently).
 4. Turn **off** "Ask Before Running."
 
-With "Ask Before Running" off, the Shortcut fires silently each morning and your dashboard has fresh steps and sleep data waiting before you even open it.
+With "Ask Before Running" off, the steps/sleep Shortcut fires completely silently each morning. **Log Mood** and **Log Screen Time** still need you to tap one option when they fire — turning off "Ask Before Running" just skips the extra "Run Shortcut?" confirmation, so the only thing you see is the picker itself.
 
 ### Payload format
 
@@ -335,7 +336,7 @@ So the split is:
 |---|---|
 | Google Calendar / Gmail | Real OAuth sync, fully automatic, works from the phone browser |
 | Apple Health (steps, sleep) | iOS Shortcut pushes to the webhook on a morning schedule |
-| Apple Journal (State of Mind → Mood) | Same Shortcut — HealthKit valence, converted to the 1–10 Mood scale |
+| Apple Journal (State of Mind → Mood) | Semi-manual — stock Shortcuts can't read Journal, so a Shortcut prompts you to pick your mood and posts it |
 | Screen Time | Semi-manual — a Shortcut opens Settings, prompts you, and posts what you type |
 | Oura / Whoop / Fitbit | Not built, but these have real cloud APIs and would be proper connectors |
 

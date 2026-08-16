@@ -4,8 +4,11 @@
  *
  * The Journal app writes a daily reflection to HealthKit as a `State of Mind`
  * sample, and the Health app's "Log your State of Mind" does the same for
- * momentary check-ins. Shortcuts can read those samples, so Journal's mood
- * rating reaches this app on exactly the same webhook as steps and sleep.
+ * momentary check-ins. Stock Shortcuts has no action to read those samples
+ * back out (only to log new ones), so in practice this module's valence path
+ * is fed by a Shortcut that asks the user to pick one of the seven mood
+ * labels rather than by reading Journal directly — see the README. Either
+ * way, mood reaches this app on the same webhook as steps and sleep.
  *
  * The wrinkle is the scale. HealthKit stores State of Mind as **valence**, a
  * float from -1.0 (most unpleasant) to +1.0 (most pleasant); the seven faces
