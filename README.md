@@ -83,7 +83,7 @@ On localhost an unset `APP_PASSWORD` means no gate at all, because typing a pass
 npm test
 ```
 
-419 tests cover the logic that's easy to break silently: correlation math and its 8-paired-points floor, streak rules, direction-aware deltas, local-date arithmetic across DST and leap days, ISO week numbering (including 53-week years), health-payload matching and duration parsing, tolerant JSON repair, OAuth error classification, token verification, session-token derivation, and import validation.
+421 tests cover the logic that's easy to break silently: correlation math and its 8-paired-points floor, streak rules, direction-aware deltas, local-date arithmetic across DST and leap days, ISO week numbering (including 53-week years), health-payload matching and duration parsing, tolerant JSON repair, OAuth error classification, token verification, session-token derivation, and import validation.
 
 ```bash
 npm run test:coverage
@@ -371,14 +371,16 @@ Four actions, and you never type a brace or a quote. That matters: hand-building
 8. Tap the **▸** arrow on that action to expand its options.
 9. Tap **Method** and change it from `GET` to **POST**.
 10. Tap **Headers**, then **Add new header**. Key: `Authorization`. Value: the word `Bearer`, one space, then your token from **⚙ Track → Connectors → Apple Health → Bearer token → Copy**. It must read `Bearer abc123…`.
-11. Tap **Request Body** and choose **JSON**. (Not Form, not File.)
-12. Tap **Add new field** and set its type to **Text**.
+11. Tap **Request Body** and choose **Form**. (Form, not JSON — see the note below.)
+12. Tap **Add new field**. Leave its type as **Text**.
 13. For the field's **Key**, type: `screenTime`
-14. Tap the field's **Value** box, then tap **Provided Input** in the suggestion bar above the keyboard so it inserts as a blue token. **Do not type the words** — if the value shows as plain text rather than a blue capsule, the import will report exactly that and nothing will be logged.
+14. Tap the field's **Value** box, then tap **Provided Input** in the suggestion bar above the keyboard so it inserts as a blue token. **Do not type the words** — if the value shows as plain text rather than a blue capsule, the import says so and nothing is logged.
+
+> **Why Form rather than JSON.** The endpoint accepts both, and JSON is the more obvious choice — but in the Shortcuts UI the JSON body editor hides the value behind a field-type picker and will happily keep an empty Value box, which posts `{"screenTime": ""}` and imports nothing. The Form editor is a flat list of key/value rows where the variable drops straight in. If your JSON body keeps coming back `empty value`, switch the body type to Form and re-add the field; nothing on the server side changes.
 15. Tap the shortcut's name at the top, choose **Rename**, and call it `Log Screen Time`.
 16. Tap **Done** in the top-right.
 
-Choosing **JSON** as the body type sets `Content-Type: application/json` for you, so there is no second header to add.
+Shortcuts sets `Content-Type` itself from the body type you picked, so there is no second header to add.
 
 **Part 2 — test it, and see what the server says**
 

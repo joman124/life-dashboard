@@ -59,11 +59,28 @@ export async function POST(req: Request) {
     // a well-formed body is never altered; repairs are reported back so a
     // Shortcut producing them can be corrected instead of relied on.
     const rawBody = await req.text().catch(() => '');
-    const parse = parseLenientJson(rawBody);
-    if (!parse.ok) {
-      return jsonError(parse.error, 400);
+
+    // Form-encoded bodies are accepted as well as JSON. Not for API tidiness:
+    // in the iOS Shortcuts UI, "Request Body: Form" is a flat list of key/value
+    // rows where dropping a variable into the value is one tap, whereas the
+    // JSON body editor nests the value behind a field-type picker and silently
+    // accepts an empty box. Offering both means a user who cannot get the
+    // variable to stick in one editor has a working alternative rather than a
+    // dead end.
+    let body: unknown;
+    let repairs: string[] = [];
+    const contentType = req.headers.get('content-type') ?? '';
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+      body = Object.fromEntries(new URLSearchParams(rawBody));
+    } else {
+      const parse = parseLenientJson(rawBody);
+      if (!parse.ok) {
+        return jsonError(parse.error, 400);
+      }
+      body = parse.value;
+      repairs = parse.repairs;
     }
-    const body = parse.value;
+
     if (body === null || typeof body !== 'object' || Array.isArray(body)) {
       return jsonError('Body must be a JSON object like {"steps":9336,"sleep":7.6}', 400);
     }
@@ -90,7 +107,7 @@ export async function POST(req: Request) {
       ignored: result.ignored,
       // Present only when the body needed fixing to parse. Surfaced so a
       // Shortcut quietly emitting curly quotes is visible rather than masked.
-      ...(parse.repairs.length > 0 ? { repairs: parse.repairs } : {}),
+      ...(repairs.length > 0 ? { repairs } : {}),
       importedCount: result.imported.length,
       lastImport: (await getSyncValue('last_health_import')) ?? lastImport,
     });

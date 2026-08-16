@@ -119,3 +119,21 @@ describe('parseLenientJson — failures name the problem', () => {
     expect(parseLenientJson('42').ok).toBe(true);
   });
 });
+
+/**
+ * Form-encoded bodies are handled in the route (via URLSearchParams) rather
+ * than here, but the shape they produce has to survive the matcher — every
+ * value arrives as a string, including numbers.
+ */
+describe('form-encoded payload shape', () => {
+  test('URLSearchParams produces the flat string map the matcher expects', () => {
+    const parsed = Object.fromEntries(new URLSearchParams('screenTime=3h+24m&steps=9336'));
+    expect(parsed).toEqual({ screenTime: '3h 24m', steps: '9336' });
+  });
+
+  test('an empty form field yields an empty string, not a missing key', () => {
+    // This is what makes the "empty value" diagnosis reachable for Form bodies
+    // as well as JSON ones.
+    expect(Object.fromEntries(new URLSearchParams('screenTime='))).toEqual({ screenTime: '' });
+  });
+});
