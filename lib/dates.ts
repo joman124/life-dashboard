@@ -161,3 +161,30 @@ export function isoWeek(iso: string): number {
 
   return 1 + Math.round((thursday.getTime() - week1Thursday.getTime()) / (7 * MS_PER_DAY));
 }
+
+
+/**
+ * The ISO week-numbering year, which is not always the calendar year: 1 Jan
+ * 2027 is a Friday and belongs to week 53 of 2026. Needed so a week is never
+ * labelled against the wrong year — reading the year off the date string
+ * (`iso.slice(0, 4)`) gets exactly these boundary days wrong.
+ */
+export function isoWeekYear(iso: string): number {
+  const d = parseUTC(iso);
+  const dow = (d.getUTCDay() + 6) % 7;
+  return new Date(d.getTime() + (3 - dow) * MS_PER_DAY).getUTCFullYear();
+}
+
+/**
+ * Total ISO weeks in a week-numbering year: 52, or 53 in a long year.
+ *
+ * The count does NOT cap at 52. A year has 53 ISO weeks when 1 January is a
+ * Thursday, or a Wednesday in a leap year — not a rare edge case: 2026 opens
+ * on a Thursday, so this year really does run to week 53 (29 Dec 2026 –
+ * 3 Jan 2027). Clamping to 52 would mislabel that week and disagree with every
+ * other calendar, so the range is left honest.
+ */
+export function isoWeeksInYear(year: number): number {
+  // 28 December is always in the last ISO week of its year.
+  return isoWeek(`${year}-12-28`);
+}

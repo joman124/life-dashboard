@@ -461,6 +461,7 @@ This project is built under the **Big Beet** orchestration system. The following
 6. **The design system is non-negotiable.** Every color, radius, font, and spacing decision must match the spec above. If a component deviates, fix it before the session ends.
 7. **Silent failures are bugs.** Every integration must surface real error states in the UI. `console.log`-only errors do not count.
 8. **`.env.local` and `data/` are always gitignored.** Never write secrets or the SQLite file to git.
+9. **Anything the user has to do themselves is written as numbered step-by-step directions.** This applies everywhere — chat replies, README sections, error messages that suggest a fix. Never hand back a summary like "set up a Shortcut that reads Screen Time and posts it" or "reconnect Google." Write out every step in order, one action per step, naming the exact app, the exact screen, the exact button or menu item to tap, and what should be on screen when it works. Say where to start ("Open the Shortcuts app"), not just what to achieve. If a step needs a value from somewhere else in the app, say which tab to get it from. If a step is easy to get wrong, say what the wrong result looks like. Assume the user is following along on a phone with the instructions on another screen, and can't infer a missing step.
 
 ### Suggested agent delegation
 

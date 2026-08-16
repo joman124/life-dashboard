@@ -104,7 +104,11 @@ describe('matchHealthPayload — value coercion', () => {
     for (const value of ['', '   ']) {
       const result = matchHealthPayload({ steps: value }, METRICS, DEFAULT_DATE);
       expect(result.imported).toEqual([]);
-      expect(result.ignored).toEqual([{ key: 'steps', reason: 'non-numeric value' }]);
+      expect(result.ignored).toHaveLength(1);
+      expect(result.ignored[0].key).toBe('steps');
+      // Named specifically: an empty value is a Shortcut wiring problem, not a
+      // typo, and saying so points at the action that needs fixing.
+      expect(result.ignored[0].reason).toContain('empty value');
     }
   });
 
@@ -137,11 +141,13 @@ describe('matchHealthPayload — value coercion', () => {
     expect(result.ignored).toHaveLength(2);
   });
 
-  test('checks the value before looking for a metric', () => {
-    // An unmatched key that is ALSO non-numeric reports the value problem,
-    // which is the more actionable message.
+  test('looks for the metric before judging the value', () => {
+    // Reversed deliberately: readability is unit-dependent now (a duration is
+    // valid for an hours metric, meaningless for a count), so a value cannot be
+    // judged before its metric is known. An unmatched key reports the missing
+    // metric — the problem that actually has to be fixed first.
     const result = matchHealthPayload({ nonsense: 'abc' }, METRICS, DEFAULT_DATE);
-    expect(result.ignored).toEqual([{ key: 'nonsense', reason: 'non-numeric value' }]);
+    expect(result.ignored).toEqual([{ key: 'nonsense', reason: 'no matching metric' }]);
   });
 });
 
@@ -165,6 +171,16 @@ describe('matchHealthPayload — unmatched keys', () => {
       { key: 'heartRate', reason: 'no matching metric' },
       { key: 'steps', reason: 'non-numeric value' },
     ]);
+  });
+
+  test('a duration sent to a metric that does not exist blames the metric, not the value', () => {
+    // The regression this test exists for: posting {"screenTime": "3h 24m"} to
+    // a database without a Screen Time metric reported 'non-numeric value',
+    // which sent the user looking for a formatting mistake in a string that was
+    // formatted perfectly. The metric was simply missing.
+    const result = matchHealthPayload({ screenTime: '3h 24m' }, METRICS, DEFAULT_DATE);
+    expect(result.imported).toEqual([]);
+    expect(result.ignored).toEqual([{ key: 'screenTime', reason: 'no matching metric' }]);
   });
 
   test('handles an empty metric list', () => {

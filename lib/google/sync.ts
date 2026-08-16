@@ -9,17 +9,33 @@
  * Calendar and Gmail are fetched independently and their failures are caught
  * separately, so one API erroring (e.g. a scope problem) never blocks the other.
  * Readable error strings are returned in `errors` for the UI to surface.
+ *
+ * The one failure that is NOT per-source is an expired/revoked refresh token:
+ * both APIs share the OAuth client, so both throw `invalid_grant` and reporting
+ * them independently produced the useless "Calendar: invalid_grant · Gmail:
+ * invalid_grant". That case is detected, collapsed into one actionable message,
+ * and recorded in sync_state so the connector card can show `token_expired`
+ * with a Reconnect button without having to call Google again.
  */
 import { google } from 'googleapis';
 import type { Auth } from 'googleapis';
 import type { InboxMessage } from '@/lib/types';
 import { endOfDay, formatClock, startOfDay, todayISO } from '@/lib/dates';
 import {
+  deleteSyncValue,
   replaceCalendarTimeline,
   setSyncValue,
   upsertEntry,
   type TimelineInsert,
 } from '@/lib/db';
+import { authExpiredMessage, isAuthExpired } from './errors';
+
+/**
+ * sync_state key holding the reason the Google connection needs re-consent.
+ * Its presence is what makes /api/connectors/google report `token_expired`;
+ * it is cleared on a successful sync, on connect, and on disconnect.
+ */
+export const GOOGLE_AUTH_ERROR_KEY = 'google_auth_error';
 
 /* --------------------------------------------------------------- result shape */
 
@@ -27,8 +43,16 @@ export interface SyncResult {
   calendar: { events: number };
   deepWork: { hours: number } | null;
   gmail: { inboxCount: number; digest: InboxMessage[] } | null;
-  lastSync: string;
+  /** ISO timestamp of the last sync that actually retrieved something, or null. */
+  lastSync: string | null;
   errors: { calendar?: string; gmail?: string; gmailDigest?: string };
+  /**
+   * True when the stored refresh token can no longer be used and the user must
+   * reconnect. When set, `authError` carries the single message to show and the
+   * per-source `errors` are omitted — they would only repeat the same cause.
+   */
+  authExpired: boolean;
+  authError?: string;
 }
 
 /**
@@ -237,11 +261,19 @@ export async function syncGoogle(auth: Auth.OAuth2Client): Promise<SyncResult> {
   let calendarEvents = 0;
   let deepWork: SyncResult['deepWork'] = null;
   let gmail: SyncResult['gmail'] = null;
+  let calendarOk = false;
+  let gmailOk = false;
+
+  // The raw throwables are kept, not just their messages, so the auth check
+  // below can inspect the OAuth error body rather than string-matching prose.
+  let calendarErr: unknown = null;
+  let gmailErr: unknown = null;
 
   // Calendar (independent failure).
   try {
     const outcome = await syncCalendar(auth, today);
     calendarEvents = outcome.timelineCount;
+    calendarOk = true;
     // Only write Deep Work when at least one event matched. Writing 0 on a day
     // with no matching events would clobber a manually-logged value — so we skip.
     if (outcome.deepWorkMatched) {
@@ -249,6 +281,7 @@ export async function syncGoogle(auth: Auth.OAuth2Client): Promise<SyncResult> {
       deepWork = { hours: outcome.deepWorkHours };
     }
   } catch (e) {
+    calendarErr = e;
     errors.calendar = apiErrorMessage(e);
   }
 
@@ -275,12 +308,50 @@ export async function syncGoogle(auth: Auth.OAuth2Client): Promise<SyncResult> {
     await setSyncValue('today_inbox_digest', JSON.stringify({ date: today, messages: digest }));
 
     gmail = { inboxCount, digest };
+    // The COUNT succeeded, which is what makes this sync worth stamping. A
+    // failed digest is reported in errors.gmailDigest but must not mark the
+    // whole Gmail sync as having retrieved nothing.
+    gmailOk = true;
   } catch (e) {
+    gmailErr = e;
     errors.gmail = apiErrorMessage(e);
   }
 
-  const lastSync = new Date().toISOString();
-  await setSyncValue('last_google_sync', lastSync);
+  // Shared-credential failure: both APIs use one OAuth client, so an expired or
+  // revoked refresh token takes out whichever of them ran. Report it once, as
+  // the thing the user has to do, and drop the duplicated per-source codes.
+  const expiredFrom = isAuthExpired(calendarErr)
+    ? calendarErr
+    : isAuthExpired(gmailErr)
+      ? gmailErr
+      : null;
+
+  if (expiredFrom !== null) {
+    const authError = authExpiredMessage(expiredFrom);
+    await setSyncValue(GOOGLE_AUTH_ERROR_KEY, authError);
+    return {
+      calendar: { events: calendarEvents },
+      deepWork,
+      gmail,
+      // Nothing was retrieved, so the "last synced" stamp must not move — a
+      // fresh timestamp next to stale data is exactly the silent failure the
+      // spec forbids.
+      lastSync: null,
+      errors: {},
+      authExpired: true,
+      authError,
+    };
+  }
+
+  // Credentials worked (whatever else may have failed): clear any stale expiry.
+  await deleteSyncValue(GOOGLE_AUTH_ERROR_KEY);
+
+  // Only stamp last_google_sync when at least one source actually returned.
+  let lastSync: string | null = null;
+  if (calendarOk || gmailOk) {
+    lastSync = new Date().toISOString();
+    await setSyncValue('last_google_sync', lastSync);
+  }
 
   return {
     calendar: { events: calendarEvents },
@@ -288,5 +359,6 @@ export async function syncGoogle(auth: Auth.OAuth2Client): Promise<SyncResult> {
     gmail,
     lastSync,
     errors,
+    authExpired: false,
   };
 }

@@ -9,6 +9,7 @@
 // fastest way to verify the endpoint works before wiring up the Shortcut).
 
 import { useCallback, useEffect, useState } from 'react';
+import { parseLenientJson } from '@/lib/health/lenientJson';
 import { PRIMARY_STYLE, SECONDARY_STYLE, errorText, humanizeSync, readError } from './shared';
 
 interface HealthState {
@@ -19,7 +20,7 @@ interface HealthState {
 
 interface HealthImportResult {
   date: string;
-  imported: { metricId: string; value: number }[];
+  imported: { metricId: string; value: number; note?: string }[];
   ignored: { key: string; reason: string }[];
   importedCount: number;
   lastImport: string;
@@ -32,6 +33,10 @@ export default function HealthConnector({ refresh }: { refresh: () => Promise<vo
   const [paste, setPaste] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  /** Per-key "why it was skipped" lines shown under the summary. */
+  const [msgDetail, setMsgDetail] = useState<string[]>([]);
+  /** True when something was skipped — colours the summary as a warning. */
+  const [msgIsWarning, setMsgIsWarning] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -68,14 +73,18 @@ export default function HealthConnector({ refresh }: { refresh: () => Promise<vo
     if (!token || !paste.trim()) return;
     setBusy(true);
     setMsg(null);
+    setMsgDetail([]);
+    setMsgIsWarning(false);
     setErr(null);
     try {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(paste);
-      } catch {
-        throw new Error('That isn’t valid JSON. Example: {"steps": 9336, "sleep": 7.6}');
-      }
+      // Tolerant of the corruptions a phone paste introduces (curly quotes,
+      // non-breaking spaces, a stray code fence) and explicit about what it
+      // repaired, so a Shortcut that keeps producing them can be fixed at
+      // source rather than silently patched on every import.
+      const parse = parseLenientJson(paste);
+      if (!parse.ok) throw new Error(parse.error);
+      const parsed = parse.value;
+      const repairNotes = parse.repairs;
       const res = await fetch('/api/health-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -88,14 +97,27 @@ export default function HealthConnector({ refresh }: { refresh: () => Promise<vo
       const r = (await res.json()) as HealthImportResult;
       // Report what was ignored as well as what landed — a key that silently
       // matched nothing is the failure mode this connector has to make visible.
-      const imported = r.imported.map((i) => i.metricId);
-      const ignored = r.ignored.length ? ` · ignored ${r.ignored.map((i) => i.key).join(', ')}` : '';
-      setMsg(
-        (imported.length
-          ? `Imported ${imported.join(', ')} for ${r.date}`
-          : `Nothing matched for ${r.date}`) + ignored,
-      );
-      setPaste('');
+      // A converted value (State of Mind valence → 1–10) carries its own note,
+      // so "mood" reads as "mood (valence 0.6 → 8.2/10)" rather than as a
+      // number with no relationship to what the Shortcut sent.
+      const imported = r.imported.map((i) => (i.note ? `${i.metricId} (${i.note})` : i.metricId));
+      const summary = imported.length
+        ? `Imported ${imported.join(', ')} for ${r.date}`
+        : `Nothing matched for ${r.date}`;
+
+      // The REASON is the whole point of the ignored list — "ignored screenTime"
+      // tells you something went wrong and nothing about what, which is barely
+      // better than silence. Each skipped key is shown with why it was skipped,
+      // and anything skipped makes this a warning rather than a success.
+      setMsgDetail([
+        // Repairs first: they explain why an import that "worked" still needs
+        // attention in the Shortcut that produced it.
+        ...repairNotes.map((n) => `fixed on the way in — ${n}`),
+        ...r.ignored.map((i) => `${i.key} — ${i.reason}`),
+      ]);
+      setMsg(summary);
+      setMsgIsWarning(r.ignored.length > 0);
+      if (r.ignored.length === 0) setPaste('');
     } catch (e) {
       setErr(errorText(e, 'Import failed.'));
     } finally {
@@ -109,6 +131,8 @@ export default function HealthConnector({ refresh }: { refresh: () => Promise<vo
     setBusy(true);
     setErr(null);
     setMsg(null);
+    setMsgDetail([]);
+    setMsgIsWarning(false);
     try {
       const res = await fetch('/api/connectors/health/rotate', { method: 'POST' });
       if (!res.ok) {
@@ -214,7 +238,7 @@ export default function HealthConnector({ refresh }: { refresh: () => Promise<vo
           rows={2}
           value={paste}
           onChange={(e) => setPaste(e.target.value)}
-          placeholder='{"steps": 9336, "sleep": 7.6}'
+          placeholder='{"steps": 9336, "sleep": 7.6, "stateOfMind": 0.6}'
           aria-label="Health JSON to import"
         />
         <div className="mt-2 flex gap-2">
@@ -245,9 +269,22 @@ export default function HealthConnector({ refresh }: { refresh: () => Promise<vo
         </p>
       )}
       {msg && (
-        <p className="mt-2 text-[12px]" style={{ color: 'var(--gold)' }} role="status">
-          {msg}
-        </p>
+        <div className="mt-2" role="status">
+          <p className="text-[12px]" style={{ color: msgIsWarning ? 'var(--red)' : 'var(--gold)' }}>
+            {msg}
+          </p>
+          {/* One line per skipped key, each naming why. This is what turns a
+              failed import into something fixable without opening devtools. */}
+          {msgDetail.length > 0 && (
+            <ul className="mt-1 space-y-0.5">
+              {msgDetail.map((line) => (
+                <li key={line} className="text-[11px] text-[color:var(--muted)]">
+                  · {line}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   );

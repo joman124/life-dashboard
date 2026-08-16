@@ -8,6 +8,8 @@ import {
   formatDateLong,
   hourOfDay,
   isoWeek,
+  isoWeekYear,
+  isoWeeksInYear,
   lastNDates,
   startOfDay,
   todayISO,
@@ -245,5 +247,63 @@ describe('formatDateLong', () => {
 
   test('formats a December date correctly (month index 11)', () => {
     expect(formatDateLong('2026-12-25')).toBe('Friday, December 25');
+  });
+});
+
+describe('isoWeek', () => {
+  test('numbers ordinary mid-year dates', () => {
+    expect(isoWeek('2026-01-01')).toBe(1);
+    expect(isoWeek('2026-08-14')).toBe(33);
+  });
+
+  test('a week belongs to the year containing its Thursday', () => {
+    // 2027 opens on a Friday, so 1–3 Jan 2027 are still week 53 OF 2026 —
+    // the case a naive day-of-year/7 always gets wrong.
+    expect(isoWeek('2027-01-03')).toBe(53);
+    expect(isoWeekYear('2027-01-03')).toBe(2026);
+    expect(isoWeek('2027-01-04')).toBe(1);
+    expect(isoWeekYear('2027-01-04')).toBe(2027);
+  });
+
+  test('late-December dates can belong to week 1 of the next year', () => {
+    // 2024 ends on a Tuesday: 30–31 Dec 2024 fall in week 1 of 2025.
+    expect(isoWeek('2024-12-30')).toBe(1);
+    expect(isoWeekYear('2024-12-30')).toBe(2025);
+  });
+
+  test('does NOT cap at 52 — long years really do have a week 53', () => {
+    // 2026 opens on a Thursday, so it is a 53-week year. Clamping to 52 would
+    // mislabel the final week of this very year.
+    expect(isoWeek('2026-12-28')).toBe(53);
+    expect(isoWeek('2026-12-31')).toBe(53);
+    expect(isoWeek('2020-12-31')).toBe(53);
+  });
+
+  test('every date in a year lands in 1..53, and weeks never go backwards', () => {
+    let previous = 0;
+    let d = '2026-01-05'; // start of ISO week 2
+    while (d <= '2026-12-27') {
+      const w = isoWeek(d);
+      expect(w).toBeGreaterThanOrEqual(1);
+      expect(w).toBeLessThanOrEqual(53);
+      expect(w).toBeGreaterThanOrEqual(previous);
+      previous = w;
+      d = addDays(d, 1);
+    }
+  });
+
+  test('all seven days of one week share a number', () => {
+    const week = isoWeek('2026-08-10'); // Monday
+    for (let i = 0; i < 7; i++) expect(isoWeek(addDays('2026-08-10', i))).toBe(week);
+    expect(isoWeek(addDays('2026-08-10', 7))).toBe(week + 1);
+  });
+});
+
+describe('isoWeeksInYear', () => {
+  test('reports 53 for long years and 52 for the rest', () => {
+    expect(isoWeeksInYear(2026)).toBe(53); // 1 Jan is a Thursday
+    expect(isoWeeksInYear(2020)).toBe(53); // leap year starting Wednesday
+    expect(isoWeeksInYear(2025)).toBe(52);
+    expect(isoWeeksInYear(2024)).toBe(52);
   });
 });

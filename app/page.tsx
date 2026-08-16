@@ -5,7 +5,7 @@
 // the useDashboard hook; tab state lives in React state.
 
 import { useEffect, useState } from 'react';
-import { formatDateLong, hourOfDay, isoWeek, todayISO } from '@/lib/dates';
+import { formatDateLong, hourOfDay, isoWeek, isoWeekYear, isoWeeksInYear, todayISO } from '@/lib/dates';
 import { useDashboard } from './components/useDashboard';
 import Today from './components/tabs/Today';
 import Week from './components/tabs/Week';
@@ -89,6 +89,11 @@ export default function Page() {
 
   const today = todayISO();
   const week = isoWeek(today);
+  // The week-numbering year, and that year's real length (52 or 53). Both are
+  // computed rather than read off the date string, because the ISO year and the
+  // calendar year disagree on the boundary days.
+  const weekYear = isoWeekYear(today);
+  const weeksThisYear = isoWeeksInYear(weekYear);
   const inbox = dash.syncState.todayInboxCount;
   const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0];
 
@@ -113,10 +118,16 @@ export default function Page() {
         </div>
         {/* ISO-8601 week of the year — weeks run Mon–Sun and week 1 is the one
             containing the year's first Thursday. The weekly SCORE this badge
-            used to show lives on the Week tab and at the head of Trends. */}
+            used to show lives on the Week tab and at the head of Trends.
+
+            The tooltip names the ISO week-numbering YEAR, not the year in the
+            date string: 1 Jan 2027 is week 53 of 2026, and slicing the year off
+            the date would label it 2027. It also carries that year's real
+            length, so "53 of 53" is visibly the last week rather than an
+            apparent overflow past 52. */}
         <div
           className="flex shrink-0 flex-col items-center gap-1"
-          title={`ISO week ${week} of ${today.slice(0, 4)}`}
+          title={`ISO week ${week} of ${weeksThisYear} in ${weekYear}`}
         >
           <div
             className="grid h-12 w-12 place-items-center rounded-full border"

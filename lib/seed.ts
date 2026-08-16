@@ -12,6 +12,8 @@
  *   - energy loosely tracks sleep (seeded even though the metric starts inactive,
  *     so toggling it on demos instantly)
  *   - steps loosely track energy, with a mild weekend bump
+ *   - mood tracks sleep, and deep work more weakly
+ *   - screen time rises with phone pickups and falls as deep work rises
  *
  * Dates seeded: today-30 .. today-1. TODAY is intentionally left unlogged so
  * "Log Today" starts fresh and the today-optional streak logic is exercised.
@@ -22,7 +24,7 @@ import { addDays, todayISO } from '@/lib/dates';
 
 /* ------------------------------------------------------------ default metrics */
 
-interface SeedMetric {
+export interface SeedMetric {
   id: string;
   name: string;
   emoji: string;
@@ -36,7 +38,7 @@ interface SeedMetric {
   description: string;
 }
 
-const DEFAULT_METRICS: SeedMetric[] = [
+export const DEFAULT_METRICS: SeedMetric[] = [
   {
     id: 'deep-work',
     name: 'Deep Work',
@@ -102,7 +104,46 @@ const DEFAULT_METRICS: SeedMetric[] = [
     category: 'MIND',
     description: 'Subjective energy, 1–10',
   },
+  {
+    // Fed automatically by Apple Journal / Health "State of Mind" via the health
+    // webhook, which converts HealthKit's -1..+1 valence onto this 1–10 scale
+    // (lib/health/stateOfMind.ts). Also loggable by hand like any other metric.
+    id: 'mood',
+    name: 'Mood',
+    emoji: '🙂',
+    unit: '/10',
+    goal: 7,
+    goalDirection: '>=',
+    step: 1,
+    max: 10,
+    active: 1,
+    category: 'MIND',
+    description: 'Journal State of Mind, 1–10',
+  },
+  {
+    // Screen Time has no API of any kind (see README), so this metric is fed by
+    // a Shortcut that ASKS for the number rather than reading it. Unit is hours
+    // to match what Settings displays; the webhook accepts "3h 24m" verbatim.
+    id: 'screen-time',
+    name: 'Screen Time',
+    emoji: '📱',
+    unit: 'h',
+    goal: 3,
+    goalDirection: '<=',
+    step: 0.25,
+    max: 24,
+    active: 1,
+    category: 'FOCUS',
+    description: 'Daily phone screen time',
+  },
 ];
+
+/**
+ * Metrics added after the original five. Each is applied to already-seeded
+ * databases by its own guarded migration in lib/db/client.ts, so the marker for
+ * one never suppresses the other.
+ */
+export const ADDED_METRIC_IDS = ['mood', 'screen-time'] as const;
 
 /* ------------------------------------------------------------------- helpers */
 
@@ -186,12 +227,30 @@ function generate(dates: string[], coupling: number): { rows: SeedEntry[]; r: nu
     const steps =
       Math.round(clamp(7400 + (energy - 6) * 550 + noise(2400) + (isWeekend ? 1300 : 0), 6000, 13500) / 50) * 50;
 
+    // Mood: tracks sleep and (less so) deep work, on the same 1-10 scale a
+    // converted State of Mind valence lands on. Drawn last so adding it leaves
+    // the tuned sleep <-> deep-work coupling above untouched. Round to 0.5,
+    // matching the granularity a real valence conversion produces.
+    const mood =
+      Math.round(clamp(5.8 + (sleep - 7.3) * 0.9 + (deepWork - 3) * 0.15 + noise(1.2), 1, 10) * 2) / 2;
+
+    // Screen time: rises with phone pickups and eats into deep work, with a
+    // weekend bump. Rounded to 0.25h — finer than a user typing "3h 15m" needs,
+    // and the same granularity the stepper offers.
+    const screenTime =
+      Math.round(
+        clamp(1.6 + (pickups - 92) * 0.035 - (deepWork - 3) * 0.2 + noise(0.9) + (isWeekend ? 0.8 : 0), 0.5, 11)
+          * 4
+      ) / 4;
+
     rows.push(
       { metricId: 'sleep', date, value: sleep },
       { metricId: 'deep-work', date, value: deepWork },
       { metricId: 'phone-pickups', date, value: pickups },
       { metricId: 'steps', date, value: steps },
-      { metricId: 'energy', date, value: energy }
+      { metricId: 'energy', date, value: energy },
+      { metricId: 'mood', date, value: mood },
+      { metricId: 'screen-time', date, value: screenTime }
     );
     sleepSeries.push(sleep);
     deepSeries.push(deepWork);
