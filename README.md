@@ -424,6 +424,75 @@ The same parsing applies to any metric measured in hours or minutes, so Sleep ta
 
 **Prefer no Shortcut at all?** Use the **Form** toggle on the Today tab: open Settings → Screen Time, read the daily number, and type it alongside everything else. The seven-day strip means you can backfill several days at once on a Sunday rather than remembering nightly.
 
+## Sending your week to the Cowork morning brief
+
+Your morning brief in Claude Cowork already knows your calendar and your inbox. It doesn't know how your week has actually gone. This connector closes that: the dashboard exposes one read-only feed, and the brief pulls it each morning so the page you read over coffee opens with your week to date and what today should go on — without opening the app.
+
+Everything the feed returns is arithmetic over your own entries. There is no model deciding what your week meant, so the brief can never claim a number the dashboard disagrees with.
+
+### What the feed says
+
+Two things, both measured against **this calendar week so far** — Monday through today, not a rolling seven days. On a Wednesday it reports three days, and compares them against the same three weekdays of last week rather than against a full week that would make every Monday look like a collapse.
+
+**Your week so far** — per active metric: the daily values Monday to today, the average against the goal, how many days hit it, the change on the same days last week, the current streak, and whether today is logged yet.
+
+**What to focus on today** — at most three recommendations, most actionable first:
+
+1. **The widest goal gap**, stated as the move it actually takes: "Phone Pickups is the widest gap this week — averaging 82 against ≤ 50. Meeting it today means cutting about 32 on an average day."
+2. **A streak today decides** — a run of three or more days at goal with nothing logged today yet.
+3. **The lever your own correlations point at** for that widest gap — offered as an experiment to run, never as a cause.
+
+When a metric is logged too rarely to analyse, that becomes the recommendation instead. When every goal is on track, it suggests raising one rather than inventing a worry. When nothing is logged at all, it says so.
+
+### Wire it up
+
+The feed lives at `GET /api/brief`. It has its own read-only token — **not** the Apple Health one — so it works from Cowork without a login, and rotating it can never break your health import.
+
+1. Open your dashboard and go to the **⚙ Track** tab.
+2. Scroll to **Connectors** and find **Morning brief (Cowork)**.
+3. Tap **Preview the feed**. Your week should appear as plain text below the button. If a red error appears instead, fix that first — the brief will hit exactly the same error.
+4. Tap **Copy the two lines**. This copies the real link with your token in it, even though the box on screen shows dots.
+5. Open Claude Cowork and start a new conversation.
+6. Type `/morning` and press space.
+7. Paste the two lines after it and send the message.
+8. Wait for the brief to render — it takes a couple of minutes. Scroll to the bottom: it should end with a block titled **This week so far** and one titled **Focus today**. If both are missing, the fetch failed; go back to step 3.
+9. In that same conversation, send: **set this up as a recurring weekday task**. Claude stores the two lines with the schedule, so every weekday morning's brief pulls your dashboard without you doing anything.
+
+That's it. The Connectors panel shows **Last read** with a timestamp, which is how you tell a scheduled task that's quietly failing from one that simply hasn't fired yet.
+
+### What you pasted
+
+The two lines use the morning brief's own `Sections:` hook, which adds one titled block per entry at the bottom of the page:
+
+```
+Sections:
+- This week so far — fetch https://<your-dashboard>/api/brief?token=<your-token>&format=text and summarise how each metric has gone week to date, worst gap first. Use its numbers as given.
+- Focus today — from that same fetch, the focus recommendations in the order given, each in one sentence.
+```
+
+Edit them freely — the wording is yours. Ask for one metric only, ask it to lead with the streak, ask for a single sentence. The feed returns the same data whatever you ask for.
+
+### The token, and why it's in the URL
+
+The brief fetches with a web tool that cannot set an `Authorization` header, so the token rides in the query string. `Authorization: Bearer <token>` works too, if you're calling the endpoint from something that can.
+
+**Anyone holding that link can read your metrics.** It reads only — the token cannot write an entry, cannot post health data, and cannot open any other endpoint. Still, treat the link as a password:
+
+1. Go to **⚙ Track → Connectors → Morning brief (Cowork)**.
+2. Tap **Rotate token**. The old link stops working immediately.
+3. Tap **Copy the two lines** to get the new one.
+4. Open your Cowork morning brief task and replace the old lines with the new ones — the stored task still holds the dead link until you do.
+
+### Reading it yourself
+
+`?format=text` returns Markdown, which is what the two lines request and what **Preview the feed** shows you. Drop the parameter for the full structured payload instead:
+
+```bash
+curl "https://<your-dashboard>/api/brief?token=<your-token>"
+```
+
+That JSON carries everything the text does plus the raw numbers behind it — per-day values, `changePct`, `streak`, correlation `r` and its shared-day count — for anything else you want to build on top.
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |
@@ -446,6 +515,10 @@ The same parsing applies to any metric measured in hours or minutes, so Sleep ta
 | Shortcut can't connect / times out | You're probably still pointing at `localhost`, which doesn't resolve from the phone. Use the PC's LAN IP instead (run `ipconfig`), make sure the server is running with `npm run dev:lan` (not `npm run dev`), confirm both devices are on the same Wi-Fi network, and allow Node through Windows Defender Firewall for Private networks. |
 | Health data didn't appear on the dashboard | Check the `ignored` list in the webhook's response (or in the manual paste box's result). A key that doesn't match any metric's name or id is silently skipped, not imported. Also note that an inactive metric can still receive imported data — it just won't show on Today/Week/Trends until you re-activate it in Track. |
 
+| **401 Invalid or missing brief token** from `/api/brief` | The link in your Cowork task holds an old token — almost always because you pressed **Rotate token** afterward. Open **⚙ Track → Connectors → Morning brief (Cowork)**, tap **Copy the two lines**, and paste them over the old ones in the Cowork task. |
+| The morning brief renders, but without **This week so far** or **Focus today** | The fetch failed and the brief dropped the empty sections rather than printing an apology. Check the link is your deployed URL and not `localhost` — Cowork cannot reach your PC. Then tap **Preview the feed** in the Connectors panel: whatever error it shows is the one the brief hit. |
+| Brief sections say there's nothing logged | The feed only reports **this calendar week**, Monday to today. On a Monday morning with nothing logged yet, that is genuinely empty and it says so rather than reaching back into last week. |
+| Numbers in the brief don't match the Week tab | Not a bug: the Week tab charts a **trailing seven days**, the brief reports **Monday to today**. On a Wednesday they cover different days on purpose. |
 Connector errors are shown verbatim in the Track tab by design — if something goes wrong, you'll see the real error message there rather than a silent failure.
 
 ## Data & privacy
@@ -455,6 +528,7 @@ Connector errors are shown verbatim in the Track tab by design — if something 
 - OAuth tokens are stored server-side — in the gitignored `data/` folder locally, in Turso when deployed — encrypted at rest if you set `TOKEN_ENCRYPTION_KEY`, otherwise plain text. Set the key on any deployment.
 - You can export all of your data at any time as a JSON file, and restore it just as easily — see [Backing up and restoring](#backing-up-and-restoring).
 - Disconnecting Google in the Connectors panel removes the stored tokens immediately.
+- The brief feed (`/api/brief`) is the only endpoint that sends your data anywhere. It is read-only, needs its own bearer token, and is separate from the health-import token so rotating one never breaks the other — rotate it from Track → Connectors → Morning brief (Cowork).
 - The health-import webhook is the one endpoint reachable from another device on your network. It requires a bearer token, compared in constant time, and you can rotate it at any time from Track → Connectors → Apple Health, which invalidates the old one immediately.
 
 ## Roadmap

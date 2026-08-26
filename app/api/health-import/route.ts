@@ -27,22 +27,12 @@ import { listMetrics, upsertEntry, setSyncValue, getSyncValue } from '@/lib/db';
 import { parseLenientJson } from '@/lib/health/lenientJson';
 import { matchHealthPayload } from '@/lib/health/match';
 import { verifyHealthToken } from '@/lib/health/token';
+import { extractBearerToken } from '@/lib/apiToken';
 import { jsonError, toErrorMessage } from '@/lib/http';
 import { todayISO } from '@/lib/dates';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-/** Extract the presented token: Authorization: Bearer <token>, else ?token=. */
-function extractToken(req: Request): string | null {
-  const auth = req.headers.get('authorization');
-  if (auth) {
-    const match = /^Bearer\s+(.+)$/i.exec(auth.trim());
-    if (match) return match[1].trim();
-  }
-  const qp = new URL(req.url).searchParams.get('token');
-  return qp && qp.length > 0 ? qp : null;
-}
 
 /**
  * Does this text read as `key=value&key=value`? Used only after a JSON parse has
@@ -59,7 +49,7 @@ function looksFormEncoded(raw: string): boolean {
 export async function POST(req: Request) {
   try {
     // --- auth ---
-    const presented = extractToken(req);
+    const presented = extractBearerToken(req);
     if (!presented || !(await verifyHealthToken(presented))) {
       return jsonError('Invalid or missing bearer token', 401);
     }

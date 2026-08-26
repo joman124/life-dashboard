@@ -11,10 +11,11 @@
  * legitimate result and the caller renders its own empty state.
  */
 
-import type { Entry, GoalDirection, Metric, Unit } from './types';
+import type { Entry, GoalDirection, Metric } from './types';
 import { addDays, lastNDates } from './dates';
 import { topCorrelations } from './correlations';
 import { meetsGoal, streakDays } from './streaks';
+import { formatGoalText, formatUnitValue } from './units';
 
 export type InsightKind = 'pattern' | 'mover' | 'goals' | 'streak' | 'coverage';
 
@@ -32,20 +33,12 @@ const MAX_INSIGHTS = 5;
 
 /* ------------------------------------------------------------------ helpers */
 
-function suffix(unit: Unit): string {
-  if (unit === 'count') return '';
-  if (unit === 'h' || unit === 'm' || unit === '/10') return unit;
-  return ` ${unit}`; // custom label: "20 pages", not "20pages"
-}
-
-function fmt(value: number, unit: Unit): string {
-  const rounded = unit === 'count' ? Math.round(value) : Math.round(value * 10) / 10;
-  return rounded.toLocaleString('en-US') + suffix(unit);
-}
+/** Value plus unit, shared with every other written summary. */
+const fmt = formatUnitValue;
 
 /** "≥ 6.5h" / "≤ 50" — the goal on its own, for mid-sentence use. */
 function goalText(metric: Metric): string {
-  return `${metric.goalDirection === '>=' ? '≥' : '≤'} ${fmt(metric.goal, metric.unit)}`;
+  return formatGoalText(metric.goal, metric.unit, metric.goalDirection);
 }
 
 /** Percent change from `before` to `now`, or null when it isn't computable. */
