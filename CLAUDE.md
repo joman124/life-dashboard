@@ -315,6 +315,30 @@ Note in README: your phone and PC must be on the same WiFi network. Use your PC'
 
 **Manual fallback:** keep a paste-import textarea in the Connectors panel (accepts the same JSON format).
 
+---
+
+### Cowork morning brief — outbound read feed
+
+Every other connector pulls data in. This one is the only path data takes **out**: the morning brief in Claude Cowork fetches the week so far and today's focus each weekday morning, so the brief opens with the dashboard's read without anyone opening the app.
+
+**Endpoint:** `GET /api/brief`
+
+- Auth: its own read-only bearer token (`brief_read_token` in `sync_state`), presented as `Authorization: Bearer <token>` or `?token=<token>`. The query form is the one that matters — the brief fetches with a tool that cannot set headers.
+- **Separate from the Apple Health token on purpose.** That one is a write credential held by a phone; this one is a read credential held by a scheduled task. Different blast radius, different reasons to re-issue, so they rotate independently (`lib/apiToken.ts` holds the shared crypto, `lib/health/token.ts` and `lib/briefToken.ts` pin the keys).
+- Exempt in `middleware.ts` for the same reason `/api/health-import` is: it authenticates itself. The exemption is the exact path only — `/api/connectors/brief`, which reveals the token, stays behind the password gate.
+- `?format=json` (default) returns the structured payload; `?format=text` returns the same brief as Markdown.
+- Records `last_brief_fetch` in `sync_state` on every successful read, so the Connectors panel can tell a task that is quietly failing from one that has not fired yet.
+
+**Window:** the calendar week to date — Monday → today, never a trailing seven days — compared against the **same weekdays** of the previous week. A partial week is reported as partial rather than padded.
+
+**Content** (all derived arithmetic over the user's own entries; no model in the loop):
+
+- per active metric: daily values Monday → today, average vs goal, days at goal, change vs the same days last week, streak, whether today is logged
+- at most three focus items, in priority order: widest goal gap (stated as the daily move it takes) → a streak today decides → the correlation lever for that gap → a metric too sparse to analyse. Everything on track ⇒ recommend raising a goal, never invent a worry.
+- top correlations, subject to the same ≥ 8 shared-day floor as the rest of the app
+
+**Setup** is a paste, documented step by step in the README and reproduced in the Connectors panel: the panel builds the two `Sections:` lines the morning brief expects, with the token already in the URL.
+
 **Future connectors note:** design the connector layer so adding OAuth-based wearable APIs (Oura Ring, Whoop, Fitbit — all have REST APIs) is a matter of adding a new `/api/auth/<provider>` route and a sync function. Document this pattern but do not implement it now.
 
 ---
@@ -408,6 +432,9 @@ C:\Projects\life-dashboard\
 │   ├── db.ts                  ← better-sqlite3 singleton + schema init
 │   ├── seed.ts                ← 30-day seed function
 │   ├── correlations.ts        ← Pearson r engine
+│   ├── brief.ts               ← week-to-date payload + focus for the Cowork brief
+│   ├── apiToken.ts            ← shared bearer-token store (health + brief)
+│   ├── briefToken.ts          ← the brief's read-only token key
 │   ├── streaks.ts             ← streak calculation
 │   ├── autoEmoji.ts           ← keyword → emoji map
 │   └── google/

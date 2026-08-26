@@ -188,3 +188,15 @@ export function isoWeeksInYear(year: number): number {
   // 28 December is always in the last ISO week of its year.
   return isoWeek(`${year}-12-28`);
 }
+
+/**
+ * The Monday that opens the ISO week containing `iso`.
+ *
+ * Monday rather than Sunday because every other week-shaped thing here is
+ * ISO-numbered (see isoWeek), and a week whose number says Monday–Sunday but
+ * whose start date says Sunday would put one day in two different weeks.
+ */
+export function startOfWeek(iso: string): string {
+  const dow = (parseUTC(iso).getUTCDay() + 6) % 7; // Mon = 0 … Sun = 6
+  return addDays(iso, -dow);
+}

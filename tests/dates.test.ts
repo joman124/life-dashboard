@@ -12,6 +12,7 @@ import {
   isoWeeksInYear,
   lastNDates,
   startOfDay,
+  startOfWeek,
   todayISO,
 } from '@/lib/dates';
 
@@ -305,5 +306,30 @@ describe('isoWeeksInYear', () => {
     expect(isoWeeksInYear(2020)).toBe(53); // leap year starting Wednesday
     expect(isoWeeksInYear(2025)).toBe(52);
     expect(isoWeeksInYear(2024)).toBe(52);
+  });
+});
+
+describe('startOfWeek', () => {
+  test('a Monday is its own week start', () => {
+    expect(startOfWeek('2026-08-24')).toBe('2026-08-24');
+  });
+
+  test('every other day walks back to that Monday', () => {
+    // 2026-08-24 is a Monday; Tue…Sun all belong to it.
+    for (let i = 0; i < 7; i++) {
+      expect(startOfWeek(addDays('2026-08-24', i))).toBe('2026-08-24');
+    }
+    expect(startOfWeek(addDays('2026-08-24', 7))).toBe('2026-08-31');
+  });
+
+  test('Sunday closes the week rather than opening it', () => {
+    // The trap in every week-start helper: a Sunday-based one would return
+    // 2026-08-30 here and put Sunday in the following week.
+    expect(startOfWeek('2026-08-30')).toBe('2026-08-24'); // Sunday
+  });
+
+  test('crosses a month and a year boundary', () => {
+    expect(startOfWeek('2026-03-01')).toBe('2026-02-23'); // Sunday
+    expect(startOfWeek('2027-01-01')).toBe('2026-12-28'); // Friday, week 53 of 2026
   });
 });

@@ -23,6 +23,12 @@ import { SESSION_COOKIE, passwordConfigError, safeEqual, sessionToken } from '@/
  * Gating it here would silently break Apple Health import — which is exactly
  * what Vercel Authentication did, and the reason this middleware exists.
  *
+ * /api/brief is exempt for the same reason and on the same terms: the Cowork
+ * morning brief fetches it from a scheduled task that holds no session cookie,
+ * and it checks its own read-only token before returning a byte. Note this
+ * exempts the exact path only — /api/connectors/brief, which reveals that
+ * token, stays behind the gate.
+ *
  * The icons and manifest are exempt so the install prompt and home-screen icon
  * still resolve on the login screen.
  */
@@ -30,6 +36,7 @@ const PUBLIC_PATHS = new Set([
   '/login',
   '/api/login',
   '/api/health-import',
+  '/api/brief',
   '/manifest.webmanifest',
   '/apple-touch-icon.png',
   '/icon-192.png',
