@@ -33,6 +33,8 @@ export interface MetricPatchInput {
   goal?: number;
   goalDirection?: Metric['goalDirection'];
   unit?: Metric['unit'];
+  /** null clears the weekly cadence and returns the metric to daily. */
+  weeklyTarget?: number | null;
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {

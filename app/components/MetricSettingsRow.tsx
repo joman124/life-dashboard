@@ -7,6 +7,10 @@
 // tracking it but keeps its history, while Delete destroys the metric and
 // every entry ever recorded against it. Delete therefore names the metric and
 // states exactly how many entries go with it before it will proceed.
+//
+// Cadence is one control rather than two (a daily/weekly switch plus a number)
+// so there is no way to save a contradiction — "weekly, 0 days" is not a state
+// this form can reach.
 
 import { useState } from 'react';
 import type { Entry, Metric } from '@/lib/types';
@@ -34,6 +38,7 @@ export default function MetricSettingsRow({
   const [goal, setGoal] = useState(String(metric.goal));
   const [dir, setDir] = useState<Metric['goalDirection']>(metric.goalDirection);
   const [unit, setUnit] = useState<Metric['unit']>(metric.unit);
+  const [weeklyTarget, setWeeklyTarget] = useState<number | null>(metric.weeklyTarget);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +57,7 @@ export default function MetricSettingsRow({
     setGoal(String(metric.goal));
     setDir(metric.goalDirection);
     setUnit(metric.unit);
+    setWeeklyTarget(metric.weeklyTarget);
     setError(null);
     setMode('view');
   }
@@ -68,6 +74,7 @@ export default function MetricSettingsRow({
     if (goalNum !== metric.goal) patch.goal = goalNum;
     if (dir !== metric.goalDirection) patch.goalDirection = dir;
     if (unit.trim() !== metric.unit) patch.unit = unit.trim();
+    if (weeklyTarget !== metric.weeklyTarget) patch.weeklyTarget = weeklyTarget;
 
     if (Object.keys(patch).length === 0) {
       setBusy(false);
@@ -194,6 +201,30 @@ export default function MetricSettingsRow({
           />
         </label>
 
+        <label className="block">
+          <span className="eyebrow block !text-[9.5px]">How often</span>
+          <select
+            className="input mt-1"
+            value={weeklyTarget === null ? 'daily' : String(weeklyTarget)}
+            onChange={(e) =>
+              setWeeklyTarget(e.target.value === 'daily' ? null : Number(e.target.value))
+            }
+            aria-label="How often"
+          >
+            <option value="daily">Every day</option>
+            {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+              <option key={n} value={String(n)}>
+                {n} {n === 1 ? 'day' : 'days'} a week
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-[11.5px]" style={{ color: 'var(--faint)' }}>
+            {weeklyTarget === null
+              ? 'Streak counts days in a row.'
+              : 'Streak counts weeks that hit the target — a quiet day costs nothing.'}
+          </span>
+        </label>
+
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="submit"
@@ -249,6 +280,9 @@ export default function MetricSettingsRow({
         </div>
         <p className="mt-0.5 truncate text-[12px] text-[color:var(--muted)]">
           {formatGoal(metric.goal, metric.unit, metric.goalDirection)}
+          {metric.weeklyTarget !== null
+            ? ` · ${metric.weeklyTarget} ${metric.weeklyTarget === 1 ? 'day' : 'days'} / week`
+            : ''}
           {metric.description ? ` · ${metric.description}` : ''}
         </p>
       </div>

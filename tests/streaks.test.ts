@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { lastNDayHits, meetsGoal, streakDays } from '@/lib/streaks';
+import {
+  hitDaysInWeek,
+  lastNDayHits,
+  lastNWeekHits,
+  meetsGoal,
+  streakDays,
+  streakWeeks,
+} from '@/lib/streaks';
 import { addDays } from '@/lib/dates';
 import type { Entry } from '@/lib/types';
 
@@ -166,5 +173,97 @@ describe('lastNDayHits', () => {
   test('returns dates in ascending order', () => {
     const dates = lastNDayHits([], 7.5, '>=', TODAY, 14).map((h) => h.date);
     expect(dates).toEqual([...dates].sort());
+  });
+});
+
+/* ---------------------------------------------------------------- weekly ---
+ * Dates here are chosen deliberately: 2026-06-29, -06-22, -06-15 and -06-08
+ * are consecutive Mondays, and WED sits mid-week in the 06-29 week. A weekly
+ * metric is a per-day bar (`goal`) plus a count of days that must clear it.
+ */
+
+const MON = '2026-06-29';
+const WED = '2026-07-01';
+const PREV_MON = '2026-06-22';
+
+/** One entry on a given date, worth one session. */
+function on(date: string, value = 1): Entry {
+  return { metricId: 'm', date, value };
+}
+
+describe('hitDaysInWeek', () => {
+  test('counts only the days inside the Monday-to-Sunday week', () => {
+    const entries = [
+      on(addDays(MON, -1)), // the Sunday before — previous week
+      on(MON),
+      on(addDays(MON, 3)),
+      on(addDays(MON, 7)), // the Monday after — next week
+    ];
+    expect(hitDaysInWeek(entries, 1, '>=', MON)).toBe(2);
+  });
+
+  test('a logged day that misses the bar does not count', () => {
+    expect(hitDaysInWeek([on(MON, 0)], 1, '>=', MON)).toBe(0);
+  });
+});
+
+describe('streakWeeks', () => {
+  test('counts consecutive weeks that reached the target', () => {
+    const entries = [
+      on(PREV_MON),
+      on(addDays(PREV_MON, 4)),
+      on(addDays(PREV_MON, -7)),
+      on(addDays(PREV_MON, -3)),
+    ];
+    // Nothing logged this week yet, so counting starts from the week before.
+    expect(streakWeeks(entries, 1, '>=', 2, WED)).toBe(2);
+  });
+
+  test('an unfinished current week does not break the streak', () => {
+    const entries = [on(PREV_MON), on(addDays(PREV_MON, 4)), on(MON)];
+    // One session so far this week against a target of two: still running,
+    // not yet failed. This is the whole point of the weekly cadence.
+    expect(streakWeeks(entries, 1, '>=', 2, WED)).toBe(1);
+  });
+
+  test('a current week already at target counts immediately', () => {
+    const entries = [on(MON), on(addDays(MON, 1))];
+    expect(streakWeeks(entries, 1, '>=', 2, WED)).toBe(1);
+  });
+
+  test('a completed week that fell short breaks the streak', () => {
+    const entries = [on(PREV_MON), on(addDays(PREV_MON, -7)), on(addDays(PREV_MON, -5))];
+    // Last week logged once against a target of two; the week before it hit.
+    expect(streakWeeks(entries, 1, '>=', 2, WED)).toBe(0);
+  });
+
+  test('is zero when nothing has ever been logged', () => {
+    expect(streakWeeks([], 1, '>=', 1, WED)).toBe(0);
+  });
+
+  test('a daily practice judged weekly survives a single missed day', () => {
+    // Six of seven days, target six: the week is met, unlike a day streak.
+    const entries = [0, 1, 2, 3, 4, 5].map((i) => on(addDays(PREV_MON, i)));
+    expect(streakWeeks(entries, 1, '>=', 6, addDays(PREV_MON, 7))).toBe(1);
+    expect(streakDays(entries, 1, '>=', addDays(PREV_MON, 7))).toBe(0);
+  });
+});
+
+describe('lastNWeekHits', () => {
+  test('returns n weeks, oldest first, each named by its Monday', () => {
+    const hits = lastNWeekHits([], 1, '>=', 1, WED, 3);
+    expect(hits.map((h) => h.date)).toEqual(['2026-06-15', '2026-06-22', MON]);
+  });
+
+  test('reports the day count alongside the verdict', () => {
+    const entries = [on(PREV_MON), on(addDays(PREV_MON, 2)), on(addDays(PREV_MON, 4))];
+    const hits = lastNWeekHits(entries, 1, '>=', 4, WED, 2);
+    expect(hits[0]).toMatchObject({ date: PREV_MON, days: 3, hit: false, logged: true });
+    expect(hits[1]).toMatchObject({ date: MON, days: 0, hit: false, logged: false });
+  });
+
+  test('a week at or over target is a hit', () => {
+    const entries = [on(PREV_MON), on(addDays(PREV_MON, 2))];
+    expect(lastNWeekHits(entries, 1, '>=', 2, WED, 2)[0]).toMatchObject({ hit: true, days: 2 });
   });
 });

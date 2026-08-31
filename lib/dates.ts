@@ -200,3 +200,15 @@ export function startOfWeek(iso: string): string {
   const dow = (parseUTC(iso).getUTCDay() + 6) % 7; // Mon = 0 … Sun = 6
   return addDays(iso, -dow);
 }
+
+/**
+ * The n ISO weeks ending with the week that contains `endISO`, oldest →
+ * newest, each given as its Monday. The weekly counterpart of lastNDates,
+ * and what the weekly streak grid is drawn from.
+ */
+export function lastNWeeks(endISO: string, n: number): string[] {
+  const monday = startOfWeek(endISO);
+  const out: string[] = [];
+  for (let i = n - 1; i >= 0; i--) out.push(addDays(monday, -i * 7));
+  return out;
+}

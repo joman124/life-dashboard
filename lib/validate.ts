@@ -70,6 +70,15 @@ export function isGoalDirection(v: unknown): v is Metric['goalDirection'] {
   return v === '>=' || v === '<=';
 }
 
+/**
+ * A weekly target is null (daily) or a whole number of days from 1 to 7.
+ * 0 is rejected rather than read as "daily": a target of zero days would be
+ * met by never doing the thing, which is not a goal.
+ */
+export function isWeeklyTarget(v: unknown): v is number | null {
+  return v === null || (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 7);
+}
+
 export function isCategory(v: unknown): v is Metric['category'] {
   return typeof v === 'string' && (CATEGORIES as readonly string[]).includes(v);
 }

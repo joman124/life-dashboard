@@ -3,7 +3,9 @@
  *
  * This module owns the storage <-> domain serialization for metrics: SQLite has
  * no boolean, so `active` lives as INTEGER 0/1 and is converted here and only
- * here.
+ * here. `weeklyTarget` is the other shape that needs care — it is genuinely
+ * nullable (NULL means daily), so it must survive the round trip as null and
+ * never be coerced to 0, which would read as a weekly target of nothing.
  */
 import type { InValue } from '@libsql/client';
 import type { Metric } from '@/lib/types';
@@ -21,6 +23,7 @@ interface MetricRow {
   active: number; // 0 | 1 in SQLite (may arrive as number|bigint)
   category: string;
   description: string | null;
+  weeklyTarget: number | null;
 }
 
 function toMetricRow(r: RawRow): MetricRow {
@@ -36,6 +39,8 @@ function toMetricRow(r: RawRow): MetricRow {
     active: Number(r.active),
     category: String(r.category),
     description: r.description === null || r.description === undefined ? null : String(r.description),
+    weeklyTarget:
+      r.weeklyTarget === null || r.weeklyTarget === undefined ? null : Number(r.weeklyTarget),
   };
 }
 
@@ -52,6 +57,7 @@ function rowToMetric(r: MetricRow): Metric {
     active: r.active === 1,
     category: r.category as Metric['category'],
     description: r.description ?? '',
+    weeklyTarget: r.weeklyTarget,
   };
 }
 
@@ -71,8 +77,8 @@ export async function getMetricById(id: string): Promise<Metric | null> {
 export async function createMetric(metric: Metric): Promise<Metric> {
   const client = await getClient();
   await client.execute({
-    sql: `INSERT INTO metrics (id, name, emoji, unit, goal, goalDirection, step, "max", active, category, description)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO metrics (id, name, emoji, unit, goal, goalDirection, step, "max", active, category, description, weeklyTarget)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       metric.id,
       metric.name,
@@ -85,6 +91,7 @@ export async function createMetric(metric: Metric): Promise<Metric> {
       metric.active ? 1 : 0,
       metric.category,
       metric.description,
+      metric.weeklyTarget,
     ],
   });
   return (await getMetricById(metric.id)) as Metric;
@@ -103,6 +110,7 @@ const METRIC_PATCH_COLUMNS: readonly (keyof Omit<Metric, 'id'>)[] = [
   'active',
   'category',
   'description',
+  'weeklyTarget',
 ];
 
 /** Applies a partial update; returns the updated Metric, or null if id is unknown. */

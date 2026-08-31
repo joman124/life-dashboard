@@ -18,6 +18,7 @@ function metric(id: string, over: Partial<Metric> = {}): Metric {
     active: true,
     category: 'CUSTOM',
     description: '',
+    weeklyTarget: null,
     ...over,
   };
 }

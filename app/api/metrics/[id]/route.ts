@@ -20,6 +20,7 @@ import {
   isFiniteNumber,
   isGoalDirection,
   isUnit,
+  isWeeklyTarget,
   maxFor,
   normalizeUnit,
   stepFor,
@@ -90,6 +91,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       if (!isCategory(body.category)) return jsonError('"category" must be one of: FOCUS, BODY, MIND, CUSTOM.', 400);
       patch.category = body.category;
     }
+    if (body.weeklyTarget !== undefined) {
+      if (!isWeeklyTarget(body.weeklyTarget)) {
+        return jsonError('"weeklyTarget" must be null (daily) or a whole number of days from 1 to 7.', 400);
+      }
+      patch.weeklyTarget = body.weeklyTarget;
+    }
     if (body.description !== undefined) {
       if (typeof body.description !== 'string') return jsonError('"description" must be a string.', 400);
       patch.description = body.description;
@@ -97,7 +104,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
     if (Object.keys(patch).length === 0) {
       return jsonError(
-        'No updatable fields provided. Updatable: active, goal, goalDirection, name, emoji, unit, step, max, category, description.',
+        'No updatable fields provided. Updatable: active, goal, goalDirection, weeklyTarget, name, emoji, unit, step, max, category, description.',
         400
       );
     }

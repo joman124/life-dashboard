@@ -87,6 +87,10 @@ export async function POST(req: Request) {
       unit,
       goal,
       goalDirection,
+      // A new metric starts daily. Choosing a cadence is a decision about a
+      // practice you have already been keeping, so it belongs to Edit rather
+      // than to the moment of creation.
+      weeklyTarget: null,
       step: body.step !== undefined ? (body.step as number) : stepFor(unit),
       max: body.max !== undefined ? (body.max as number) : maxFor(unit),
       active: true,

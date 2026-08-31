@@ -43,7 +43,12 @@ const SCHEMA_STATEMENTS: string[] = [
     "max"         REAL NOT NULL,
     active        INTEGER NOT NULL DEFAULT 1,
     category      TEXT NOT NULL DEFAULT 'CUSTOM',
-    description   TEXT NOT NULL DEFAULT ''
+    description   TEXT NOT NULL DEFAULT '',
+    -- NULL = daily. 1-7 = the metric is judged weekly, and this many days in
+    -- the week have to clear the goal. Nullable rather than defaulted to 7,
+    -- because "no weekly target" and "seven days a week" are different
+    -- verdicts: the first counts a day streak, the second a week streak.
+    weeklyTarget  INTEGER
   )`,
   `CREATE TABLE IF NOT EXISTS entries (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,6 +96,18 @@ const SCHEMA_STATEMENTS: string[] = [
  * cannot re-run and undo a later user decision.
  */
 async function runMigrations(client: Client): Promise<void> {
+  // Column adds are guarded by the table's actual shape rather than a marker
+  // row: the question "does this column exist" has a real answer, and asking
+  // it directly cannot drift out of step with a database restored, branched
+  // or hand-edited outside this code path.
+  const columns = await client.execute('PRAGMA table_info(metrics)');
+  const hasWeeklyTarget = columns.rows.some((r) => String(r.name) === 'weeklyTarget');
+  if (!hasWeeklyTarget) {
+    // No DEFAULT: every existing metric stays daily, which is what it was
+    // being judged as before the column existed.
+    await client.execute('ALTER TABLE metrics ADD COLUMN weeklyTarget INTEGER');
+  }
+
   // One marker per added metric, so introducing a new one later is not blocked
   // by the marker an earlier migration already wrote.
   for (const metricId of ADDED_METRIC_IDS) {

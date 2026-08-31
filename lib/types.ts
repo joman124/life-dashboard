@@ -36,6 +36,19 @@ export interface Metric {
   active: boolean;
   category: Category;
   description: string;
+  /**
+   * How often this metric is meant to be hit.
+   *
+   * `null` means daily: the goal is a bar to clear every day, and the streak
+   * counts consecutive days. A number 1-7 means weekly: the goal is still the
+   * per-day bar, but the week is what is judged, and a week is met once that
+   * many days in it have cleared the bar. The streak then counts weeks.
+   *
+   * Weekly exists because a daily streak is the wrong verdict on a practice
+   * that was never meant to be daily - it reads as failing six days out of
+   * seven when the intent was one good session a week.
+   */
+  weeklyTarget: number | null;
 }
 
 export interface Entry {

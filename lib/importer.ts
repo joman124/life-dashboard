@@ -17,6 +17,7 @@ import {
   UNITS,
   isCategory,
   isFiniteNumber,
+  isWeeklyTarget,
   isGoalDirection,
   isUnit,
   normalizeUnit,
@@ -88,6 +89,11 @@ export function parseImport(raw: unknown): ParseResult {
     if (m.description !== undefined && typeof m.description !== 'string') {
       return fail(`${at}.description must be a string.`);
     }
+    // Absent means daily, so an export written before cadence existed still
+    // imports; present means it has to be a real target.
+    if (m.weeklyTarget !== undefined && !isWeeklyTarget(m.weeklyTarget)) {
+      return fail(`${at}.weeklyTarget must be null or a whole number of days from 1 to 7.`);
+    }
 
     parsedMetrics.push({
       id,
@@ -101,6 +107,7 @@ export function parseImport(raw: unknown): ParseResult {
       active: m.active,
       category: m.category,
       description: typeof m.description === 'string' ? m.description : '',
+      weeklyTarget: m.weeklyTarget === undefined ? null : m.weeklyTarget,
     });
   }
 
