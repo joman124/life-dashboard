@@ -524,7 +524,7 @@ Connector errors are shown verbatim in the Track tab by design — if something 
 ## Data & privacy
 
 - Run locally, nothing leaves your machine except your own calls to Google's OAuth and API endpoints. Deployed, the data lives in your Turso database and the app is reachable only with the app password.
-- The GitHub repository is private, and the deployment is gated — see [Deploying it privately](#deploying-it-privately).
+- The GitHub repository is public — anyone can read the code — but that's fine by design: `.env.local` and `data/` are gitignored, so no secret or personal data ever reaches it. All of your actual data (metrics, entries, OAuth tokens, the health-import and brief bearer tokens) lives in Turso, not in git. The deployment itself is gated behind the app password — see [Deploying it privately](#deploying-it-privately). If you'd rather the code itself be private too, make the repository private in GitHub's settings; nothing here depends on it being public.
 - OAuth tokens are stored server-side — in the gitignored `data/` folder locally, in Turso when deployed — encrypted at rest if you set `TOKEN_ENCRYPTION_KEY`, otherwise plain text. Set the key on any deployment.
 - You can export all of your data at any time as a JSON file, and restore it just as easily — see [Backing up and restoring](#backing-up-and-restoring).
 - Disconnecting Google in the Connectors panel removes the stored tokens immediately.
