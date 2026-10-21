@@ -11,6 +11,7 @@
 // Everything is relative to `date` rather than to today, so the same card edits
 // a backdated day when the day strip selects one.
 
+import { useState } from 'react';
 import type { Entry, Metric } from '@/lib/types';
 import { addDays, lastNDates } from '@/lib/dates';
 import { deltaVsBaseline } from '@/lib/deltas';
@@ -30,8 +31,9 @@ export default function MetricCard({
   /** The day this card reports on and edits. */
   date: string;
   /** Omitted in form mode — the card then renders read-only. */
-  onLog?: (metricId: string, value: number, date: string) => void;
+  onLog?: (metricId: string, value: number, date: string) => Promise<void>;
 }) {
+  const [saving, setSaving] = useState(false);
   const map = valueMap(entries, metric.id);
   const entry = map.get(date);
   const logged = entry !== undefined;
@@ -39,18 +41,25 @@ export default function MetricCard({
 
   const sparkValues = seriesFor(map, lastNDates(date, 7));
   const baseline = loggedValues(map, lastNDates(addDays(date, -1), 7));
-  const delta = deltaVsBaseline(value, baseline, metric.goalDirection);
+  const delta =
+    baseline.length >= 4 ? deltaVsBaseline(value, baseline, metric.goalDirection) : null;
   const progress = progressPct(value, metric.goal, metric.goalDirection);
   const suffix = unitSuffix(metric.unit);
 
-  function bump(sign: 1 | -1) {
-    if (!onLog) return;
+  async function bump(sign: 1 | -1) {
+    if (!onLog || saving) return;
     const current = value ?? 0;
-    const next = Math.round(Math.min(metric.max, Math.max(0, current + sign * metric.step)) * 100) / 100;
+    const next =
+      Math.round(Math.min(metric.max, Math.max(0, current + sign * metric.step)) * 100) / 100;
     // At a bound with a value already stored there is nothing to write; and on
     // an unlogged metric a − tap must not phantom-log a 0.
     if (next === current) return;
-    onLog(metric.id, next, date);
+    setSaving(true);
+    try {
+      await onLog(metric.id, next, date);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -65,7 +74,9 @@ export default function MetricCard({
       <div className="mt-2 flex items-end justify-between gap-3">
         <div className="flex min-w-0 items-baseline gap-1">
           {value === null ? (
-            <span className="font-display text-[34px] leading-none text-[color:var(--faint)]">—</span>
+            <span className="font-display text-[34px] leading-none text-[color:var(--faint)]">
+              —
+            </span>
           ) : (
             <>
               <span className="font-display text-[34px] leading-none">
@@ -88,7 +99,8 @@ export default function MetricCard({
           <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
-              onClick={() => bump(-1)}
+              onClick={() => void bump(-1)}
+              disabled={saving}
               aria-label={`Decrease ${metric.name}`}
               className="grid h-11 w-11 place-items-center rounded-full border text-[18px] leading-none active:scale-95"
               style={{
@@ -101,7 +113,8 @@ export default function MetricCard({
             </button>
             <button
               type="button"
-              onClick={() => bump(1)}
+              onClick={() => void bump(1)}
+              disabled={saving}
               aria-label={`Increase ${metric.name}`}
               className="grid h-11 w-11 place-items-center rounded-full border text-[18px] leading-none active:scale-95"
               style={{

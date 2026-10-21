@@ -42,14 +42,14 @@ export default function WhatMovesWhat({
 
   return (
     <section className="card card-gold p-4">
-      <h2 className="font-display text-[20px]">What actually moves what</h2>
+      <h2 className="font-display text-[20px]">What your data suggests</h2>
 
       {/* ---------------------------------------------- this week's verdict */}
       <div className="mt-3 flex items-center gap-3">
         <div
           className="grid h-12 w-12 shrink-0 place-items-center rounded-full border"
           style={{ borderColor: 'var(--gold-dim)' }}
-          title="Percent of active metrics whose 7-day average meets goal"
+          title="Percent of assessed goals on target; sparse and in-progress goals excluded"
         >
           <span className="font-display text-[17px]" style={{ color: 'var(--gold)' }}>
             {review.hasData ? review.score : '–'}
@@ -133,12 +133,13 @@ export default function WhatMovesWhat({
                   style={i > 0 ? { borderTop: '1px solid var(--hairline)' } : undefined}
                 >
                   <div className="truncate text-[14px]">
-                    {a.emoji} {a.name} <span className="text-[color:var(--faint)]">→</span> {b.emoji}{' '}
-                    {b.name}
+                    {a.emoji} {a.name} <span className="text-[color:var(--faint)]">→</span>{' '}
+                    {b.emoji} {b.name}
                   </div>
                   <div className="mt-0.5 text-[12px] text-[color:var(--muted)]">
-                    {p.strength} {p.positive ? 'positive' : 'negative'} · r = {absR.toFixed(2)} ·{' '}
-                    {p.n} shared days
+                    {p.strength} {p.positive ? 'positive' : 'negative'} · r = {p.r.toFixed(2)} ·{' '}
+                    {p.n} shared days · rough 95% range {p.interval[0].toFixed(2)} to{' '}
+                    {p.interval[1].toFixed(2)}
                   </div>
                   <div
                     className="relative mt-2 h-1.5 w-full rounded-full"
@@ -163,8 +164,9 @@ export default function WhatMovesWhat({
             })}
           </div>
         )}
-        <p className="mt-2 text-[11px] text-[color:var(--faint)]">
-          Correlation ≠ causation. These are patterns in your own data.
+        <p className="mt-2 text-[11px] text-[color:var(--muted)]">
+          Exploratory associations, not causes. Rough 95% ranges assume independent observations;
+          repeated daily habits and testing many pairs can exaggerate patterns.
         </p>
       </div>
     </section>

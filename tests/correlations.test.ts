@@ -116,7 +116,9 @@ describe('topCorrelations — minimum paired data points', () => {
       ...series('deep-work', [3, 4, 2, 5, 3], today),
     ];
 
-    expect(topCorrelations(entries, ['sleep', 'deep-work'], { today, minPairs: 5 })).toHaveLength(1);
+    expect(topCorrelations(entries, ['sleep', 'deep-work'], { today, minPairs: 5 })).toHaveLength(
+      1,
+    );
     expect(topCorrelations(entries, ['sleep', 'deep-work'], { today, minPairs: 6 })).toEqual([]);
   });
 });
@@ -202,12 +204,12 @@ describe('topCorrelations — results', () => {
     ];
     expect(topCorrelations(strong, ['a', 'b'], { today })[0].strength).toBe('Strong');
 
-    // Zero-variance on one side gives r = 0 → Weak.
+    // Constant series has undefined r and must never be reported as evidence.
     const weak = [
       ...series('a', [1, 2, 3, 4, 5, 6, 7, 8], today),
       ...series('b', [5, 5, 5, 5, 5, 5, 5, 5], today),
     ];
-    expect(topCorrelations(weak, ['a', 'b'], { today })[0].strength).toBe('Weak');
+    expect(topCorrelations(weak, ['a', 'b'], { today })).toEqual([]);
   });
 
   test('sorts by |r| descending so the strongest link leads', () => {
@@ -296,5 +298,20 @@ describe('topCorrelations — results', () => {
     const first = topCorrelations(entries, ['a', 'b', 'c'], { today });
     const second = topCorrelations(entries, ['a', 'b', 'c'], { today });
     expect(first).toEqual(second);
+  });
+});
+
+describe('correlation evidence quality', () => {
+  test('ignores nonfinite entries and includes an interval for valid pairs', () => {
+    const end = '2026-10-21';
+    const entries = [
+      ...series('a', [1, 2, 3, 4, 5, 6, 7, 8, 9], end),
+      ...series('b', [2, 4, 6, 8, 10, 12, 14, 16, 18], end),
+      { metricId: 'b', date: addDays(end, -10), value: Infinity },
+    ];
+    const [p] = topCorrelations(entries, ['a', 'b'], { today: end });
+    expect(p.n).toBe(9);
+    expect(p.interval[0]).toBeGreaterThan(0);
+    expect(p.interval[1]).toBeLessThanOrEqual(1);
   });
 });

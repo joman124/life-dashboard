@@ -36,7 +36,7 @@ export default function LogDayBar({
   const isToday = selected === today;
 
   return (
-    <section className="card p-4">
+    <section className="card day-picker p-4">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="eyebrow">{isToday ? 'Log today' : 'Log'}</div>
         <div className="flex items-center gap-2.5">
@@ -62,13 +62,13 @@ export default function LogDayBar({
                 type="button"
                 onClick={() => onMode(m)}
                 aria-pressed={mode === m}
-                className="px-2.5 py-1.5 text-[11px]"
+                className="min-h-11 px-3 text-[12px]"
                 style={{
                   background: mode === m ? 'var(--card-inset)' : 'transparent',
                   color: mode === m ? 'var(--gold)' : 'var(--muted)',
                 }}
               >
-                {m === 'steppers' ? 'Steppers' : 'Form'}
+                {m === 'steppers' ? 'Quick adjust' : 'Type values'}
               </button>
             ))}
           </div>
@@ -101,7 +101,9 @@ export default function LogDayBar({
               <span className="text-[9.5px] uppercase tracking-[0.08em]">
                 {dayLabel(d).slice(0, 2)}
               </span>
-              <span className="font-display text-[13px] leading-none">{Number(d.slice(8, 10))}</span>
+              <span className="font-display text-[13px] leading-none">
+                {Number(d.slice(8, 10))}
+              </span>
               {/* A dot marks days that already have at least one entry, so gaps
                   in the last week are visible at a glance. */}
               <span
@@ -114,6 +116,18 @@ export default function LogDayBar({
         })}
       </div>
 
+      <label className="backdate-picker">
+        <span>{isToday ? 'Need to backfill?' : 'Editing a past day'}</span>
+        <input
+          type="date"
+          aria-label="Choose another date"
+          max={today}
+          value={selected}
+          onChange={(e) => {
+            if (e.target.value && e.target.value <= today) onSelect(e.target.value);
+          }}
+        />
+      </label>
       {!isToday && (
         <p className="mt-2 text-[11.5px]" style={{ color: 'var(--faint)' }}>
           Editing {formatDateLong(selected)}

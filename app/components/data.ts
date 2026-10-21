@@ -2,7 +2,7 @@
 // Only imports the pure lib modules (never lib/db).
 
 import type { Entry, GoalDirection, Metric } from '@/lib/types';
-import { lastNDates } from '@/lib/dates';
+import { assessGoals, goalScore } from '@/lib/feedback';
 import { meetsGoal } from '@/lib/streaks';
 
 /** Entries belonging to one metric. */
@@ -40,20 +40,12 @@ export function avg(values: number[]): number | null {
 }
 
 /**
- * Weekly score (header badge + Week tab, same definition): percentage of
- * ACTIVE metrics whose trailing-7-day average (window ending today, over
- * whatever days are logged) meets its goal per goalDirection. Integer.
+ * Legacy numeric score helper. Sparse daily metrics and unfinished weekly
+ * habits are excluded. New views use goalScore directly to preserve null when
+ * nothing can yet be assessed.
  */
 export function weeklyScore(metrics: Metric[], entries: Entry[], today: string): number {
-  const active = metrics.filter((m) => m.active);
-  if (active.length === 0) return 0;
-  const dates = lastNDates(today, 7);
-  let met = 0;
-  for (const m of active) {
-    const a = avg(loggedValues(valueMap(entries, m.id), dates));
-    if (a !== null && meetsGoal(a, m.goal, m.goalDirection)) met++;
-  }
-  return Math.round((met / active.length) * 100);
+  return goalScore(assessGoals(metrics, entries, today)) ?? 0;
 }
 
 /**

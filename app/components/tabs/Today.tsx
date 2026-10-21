@@ -11,9 +11,8 @@
 import { useState } from 'react';
 import type { Entry, InboxMessage, Metric, TimelineItem } from '@/lib/types';
 import { lastNDates } from '@/lib/dates';
-import { topCorrelations } from '@/lib/correlations';
+import FeedbackPanel from '../FeedbackPanel';
 import MetricCard from '../MetricCard';
-import InsightCard from '../InsightCard';
 import LogDayBar, { type LogMode } from '../LogDayBar';
 import QuickLogForm, { type PendingEntry } from '../QuickLogForm';
 import DayBrief from '../DayBrief';
@@ -40,12 +39,12 @@ export default function Today({
   lastGoogleSync: string | null;
   inboxCount: number | null;
   inboxDigest: InboxMessage[];
-  onLog: (metricId: string, value: number, date: string) => void;
+  onLog: (metricId: string, value: number, date: string) => Promise<void>;
   onSaveAll: (date: string, values: PendingEntry[]) => Promise<string | null>;
   refresh: () => Promise<void>;
 }) {
   const [date, setDate] = useState(today);
-  const [mode, setMode] = useState<LogMode>('steppers');
+  const [mode, setMode] = useState<LogMode>('form');
 
   const active = metrics.filter((m) => m.active);
 
@@ -53,70 +52,66 @@ export default function Today({
   // past the selected date's window, fall back to today rather than stranding
   // the user on a date the strip no longer shows.
   const days = lastNDates(today, DAY_WINDOW);
-  const selected = days.includes(date) ? date : today;
-
-  const insight = topCorrelations(
-    entries,
-    active.map((m) => m.id),
-    { top: 1, today },
-  )[0];
+  const selected = date > today ? today : date;
 
   return (
-    <div className="space-y-3">
-      <LogDayBar
-        days={days}
-        selected={selected}
-        today={today}
-        entries={entries}
-        mode={mode}
-        onSelect={setDate}
-        onMode={setMode}
-      />
-
-      {mode === 'form' && active.length > 0 && (
-        <section className="card p-4">
-          <div className="eyebrow">Type the day&apos;s numbers</div>
-          {/* Keyed by date so switching days remounts the form with that day's
-              values, instead of stranding the previous day's numbers. */}
-          <QuickLogForm
-            key={selected}
-            metrics={active}
-            entries={entries}
-            date={selected}
-            onSaveAll={onSaveAll}
-          />
-        </section>
-      )}
-
-      {active.map((m) => (
-        <MetricCard
-          key={m.id}
-          metric={m}
+    <div className="today-layout">
+      <div id="daily-check-in" className="check-in-column">
+        <LogDayBar
+          days={days}
+          selected={selected}
+          today={today}
           entries={entries}
-          date={selected}
-          // In form mode the numbers are typed above, so the cards drop their
-          // steppers rather than offering two controls for the same value.
-          onLog={mode === 'steppers' ? onLog : undefined}
+          mode={mode}
+          onSelect={setDate}
+          onMode={setMode}
         />
-      ))}
 
-      {active.length === 0 && (
-        <section className="card p-4">
-          <p className="text-[13px] text-[color:var(--muted)]">
-            No active metrics — turn some on in the ⚙ Track tab.
-          </p>
-        </section>
-      )}
+        {mode === 'form' && active.length > 0 && (
+          <section className="card entry-card">
+            {/* Keyed by date so switching days remounts the form with that day's
+              values, instead of stranding the previous day's numbers. */}
+            <QuickLogForm
+              key={selected}
+              metrics={active}
+              entries={entries}
+              date={selected}
+              onSaveAll={onSaveAll}
+            />
+          </section>
+        )}
 
-      {insight && <InsightCard pair={insight} metrics={metrics} />}
+        {mode === 'steppers' &&
+          active.map((m) => (
+            <MetricCard
+              key={m.id}
+              metric={m}
+              entries={entries}
+              date={selected}
+              // In form mode the numbers are typed above, so the cards drop their
+              // steppers rather than offering two controls for the same value.
+              onLog={mode === 'steppers' ? onLog : undefined}
+            />
+          ))}
 
-      <DayBrief
-        items={timeline}
-        lastGoogleSync={lastGoogleSync}
-        inboxCount={inboxCount}
-        inboxDigest={inboxDigest}
-        refresh={refresh}
-      />
+        {active.length === 0 && (
+          <section className="card p-4">
+            <p className="text-[13px] text-[color:var(--muted)]">
+              No active metrics — turn some on in the ⚙ Track tab.
+            </p>
+          </section>
+        )}
+      </div>
+      <FeedbackPanel metrics={metrics} entries={entries} today={today} />
+      <div className="day-brief-column">
+        <DayBrief
+          items={timeline}
+          lastGoogleSync={lastGoogleSync}
+          inboxCount={inboxCount}
+          inboxDigest={inboxDigest}
+          refresh={refresh}
+        />
+      </div>
     </div>
   );
 }

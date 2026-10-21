@@ -33,7 +33,7 @@ import {
   lastNDates,
   startOfWeek,
 } from './dates';
-import { topCorrelations } from './correlations';
+import { isUsefulPattern, topCorrelations } from './correlations';
 import { meetsGoal, streakDays } from './streaks';
 import { formatGoalText, formatUnitValue } from './units';
 
@@ -92,7 +92,7 @@ export interface BriefMetric {
   summary: string;
 }
 
-export type FocusReason = 'gap' | 'streak' | 'lever' | 'coverage' | 'raise';
+export type FocusReason = 'gap' | 'streak' | 'lever' | 'coverage' | 'raise' | 'maintain';
 
 export interface BriefFocus {
   /** Why this item is here, for a consumer that wants to group or filter. */
@@ -202,7 +202,12 @@ function goalGapPct(average: number, metric: Metric): number | null {
     : ((average - metric.goal) / metric.goal) * 100;
 }
 
-function buildMetric(metric: Metric, entries: Entry[], weekDates: string[], today: string): BriefMetric {
+function buildMetric(
+  metric: Metric,
+  entries: Entry[],
+  weekDates: string[],
+  today: string,
+): BriefMetric {
   const byDate = datesByMetric(entries, metric.id);
   const goalText = formatGoalText(metric.goal, metric.unit, metric.goalDirection);
 
@@ -304,8 +309,8 @@ function focusItem(
  *   3. The lever the user's own correlations point at for that widest gap.
  *   4. A metric logged too rarely to analyse at all.
  *
- * When every goal is on track, the honest recommendation is to raise a goal,
- * not to manufacture a worry. Each metric appears at most once.
+ * When every goal is on track, support maintaining the current rhythm.
+ * Each metric appears at most once.
  */
 function buildFocus(
   active: Metric[],
@@ -327,7 +332,10 @@ function buildFocus(
       if (gapPct === null) return null;
       return { metric, brief: b, gapPct, average: b.average };
     })
-    .filter((g): g is { metric: Metric; brief: BriefMetric; gapPct: number; average: number } => g !== null)
+    .filter(
+      (g): g is { metric: Metric; brief: BriefMetric; gapPct: number; average: number } =>
+        g !== null,
+    )
     .sort((a, b) => b.gapPct - a.gapPct);
 
   const worst = gaps[0];
@@ -377,7 +385,7 @@ function buildFocus(
         (p.aId === worst.metric.id && !claimed.has(p.bId)) ||
         (p.bId === worst.metric.id && !claimed.has(p.aId)),
     );
-    if (pair) {
+    if (pair && isUsefulPattern(pair)) {
       const otherId = pair.aId === worst.metric.id ? pair.bId : pair.aId;
       const other = summaryById.get(otherId);
       if (other) {
@@ -414,7 +422,7 @@ function buildFocus(
     claimed.add(sparse.metric.id);
   }
 
-  // Everything on track: raise the bar on whatever is clearing it widest.
+  // Everything on track: maintain the current rhythm without escalating health targets.
   if (out.length === 0) {
     let best: { brief: BriefMetric; metric: Metric; marginPct: number } | null = null;
     for (const b of briefMetrics) {
@@ -429,10 +437,9 @@ function buildFocus(
     if (best) {
       out.push(
         focusItem(
-          'raise',
-          `Every goal with data is on track this week. ${best.brief.name} is clearing ` +
-            `${best.brief.goalText} by ${Math.round(best.marginPct)}% — raise that goal before the ` +
-            `number stops meaning anything.`,
+          'maintain',
+          `Every goal with data is on track this week. Keep the rhythm that is working; ` +
+            `review targets only when they still fit your needs.`,
           best.metric,
         ),
       );
@@ -451,6 +458,7 @@ function buildPatterns(active: Metric[], entries: Entry[], today: string): Brief
     active.map((m) => m.id),
     { today, top: MAX_PATTERNS },
   )
+    .filter(isUsefulPattern)
     .map((p) => {
       const a = byId.get(p.aId);
       const b = byId.get(p.bId);
@@ -577,8 +585,7 @@ export function renderBriefText(brief: Brief): string {
         .map((d) => `${d.day} ${d.value === null ? '—' : formatUnitValue(d.value, m.unit)}`)
         .join(' · ');
       lines.push(`Days: ${byDay}`);
-      const todayText =
-        m.today === null ? 'not logged yet' : `${formatUnitValue(m.today, m.unit)}`;
+      const todayText = m.today === null ? 'not logged yet' : `${formatUnitValue(m.today, m.unit)}`;
       lines.push(
         `Today: ${todayText} · streak ${m.streak} ${m.streak === 1 ? 'day' : 'days'} at goal`,
       );

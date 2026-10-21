@@ -5,13 +5,18 @@
 // the useDashboard hook; tab state lives in React state.
 
 import { useEffect, useState } from 'react';
-import { formatDateLong, hourOfDay, isoWeek, isoWeekYear, isoWeeksInYear, todayISO } from '@/lib/dates';
+import { formatDateLong, hourOfDay, isoWeek, todayISO } from '@/lib/dates';
 import { useDashboard } from './components/useDashboard';
 import Today from './components/tabs/Today';
 import Week from './components/tabs/Week';
 import Trends from './components/tabs/Trends';
 import Streaks from './components/tabs/Streaks';
 import Track from './components/tabs/Track';
+import Icon from './components/Icon';
+import AlertCenter from './components/AlertCenter';
+
+// Date-sensitive HTML must be rendered per request rather than frozen at build time.
+export const dynamic = 'force-dynamic';
 
 type TabId = 'today' | 'week' | 'trends' | 'streaks' | 'track';
 
@@ -19,8 +24,8 @@ const TABS: { id: TabId; label: string; name: string }[] = [
   { id: 'today', label: 'Today', name: 'Today' },
   { id: 'week', label: 'Week', name: 'Week' },
   { id: 'trends', label: 'Trends', name: 'Trends' },
-  { id: 'streaks', label: '🔥', name: 'Streaks' },
-  { id: 'track', label: '⚙', name: 'Track' },
+  { id: 'streaks', label: 'Streaks', name: 'Streaks' },
+  { id: 'track', label: 'Settings', name: 'Track' },
 ];
 
 /**
@@ -56,6 +61,35 @@ export default function Page() {
   const dash = useDashboard();
   const [tab, setTab] = useState<TabId>('today');
   const [banner, setBanner] = useState<Banner | null>(null);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [alertCount, setAlertCount] = useState(0);
+  const [today, setToday] = useState(todayISO);
+  useEffect(() => {
+    const tick = () => {
+      const next = todayISO();
+      if (next !== today) {
+        setToday(next);
+        void dash.refresh();
+      }
+    };
+    const timer = window.setInterval(tick, 30_000);
+    window.addEventListener('focus', tick);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', tick);
+    };
+  }, [dash.refresh, today]);
+  function openCheckIn() {
+    setTab('today');
+    setAlertsOpen(false);
+    window.setTimeout(
+      () =>
+        document
+          .getElementById('daily-check-in')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      0,
+    );
+  }
 
   // Handle the OAuth callback redirect (/?connector=google&status|error=…):
   // show a banner, jump to the Track tab, then strip the query so a reload
@@ -87,101 +121,135 @@ export default function Page() {
     return () => window.clearTimeout(id);
   }, [banner]);
 
-  const today = todayISO();
   const week = isoWeek(today);
-  // The week-numbering year, and that year's real length (52 or 53). Both are
-  // computed rather than read off the date string, because the ISO year and the
-  // calendar year disagree on the boundary days.
-  const weekYear = isoWeekYear(today);
-  const weeksThisYear = isoWeeksInYear(weekYear);
-  const inbox = dash.syncState.todayInboxCount;
   const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0];
 
   return (
-    <div className="mx-auto min-h-screen max-w-[480px]">
-      <header className="flex items-start justify-between gap-3 px-4 pb-4 pt-6">
-        <div className="min-w-0">
-          {/* No suppressHydrationWarning: both of these now resolve through the
-              fixed UTC-7 clock, so the server and the browser render the same
-              string and there is no mismatch left to suppress. */}
-          <h1 className="font-display text-[22px] leading-tight">{greeting()}</h1>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <p className="text-[13px] text-[color:var(--muted)]">{formatDateLong(today)}</p>
-            <span
-              className="rounded-full border px-2 py-px text-[10.5px]"
-              style={{ borderColor: 'var(--hairline)', color: 'var(--faint)' }}
-              title="Today's Gmail inbox count — updates when you sync Google"
-            >
-              {inbox === null ? '— inbox' : `${inbox.toLocaleString('en-US')} inbox`}
-            </span>
-          </div>
-        </div>
-        {/* ISO-8601 week of the year — weeks run Mon–Sun and week 1 is the one
-            containing the year's first Thursday. The weekly SCORE this badge
-            used to show lives on the Week tab and at the head of Trends.
-
-            The tooltip names the ISO week-numbering YEAR, not the year in the
-            date string: 1 Jan 2027 is week 53 of 2026, and slicing the year off
-            the date would label it 2027. It also carries that year's real
-            length, so "53 of 53" is visibly the last week rather than an
-            apparent overflow past 52. */}
-        <div
-          className="flex shrink-0 flex-col items-center gap-1"
-          title={`ISO week ${week} of ${weeksThisYear} in ${weekYear}`}
+    <div className="dashboard-shell">
+      <a className="skip-link" href="#dashboard-content">
+        Skip to dashboard
+      </a>
+      <header className="app-header">
+        <button
+          type="button"
+          className="brand"
+          onClick={() => setTab('today')}
+          aria-label="Life Dashboard home"
         >
-          <div
-            className="grid h-12 w-12 place-items-center rounded-full border"
-            style={{ borderColor: 'var(--gold-dim)' }}
-          >
-            <span className="font-display text-[17px]" style={{ color: 'var(--gold)' }}>
-              {week}
-            </span>
-          </div>
-          <span className="text-[9.5px] uppercase tracking-[0.14em] text-[color:var(--faint)]">
-            Week
+          <span className="brand-mark">
+            l<span>•</span>
           </span>
+          <span>
+            life<span className="brand-divider"> / </span>
+            <small>dashboard</small>
+          </span>
+        </button>
+        <div className="header-actions">
+          <span className="header-week">
+            Week {week}
+            <span className="status-dot" />A little better, every day
+          </span>
+          <button
+            className={`icon-button alert-button ${alertsOpen ? 'is-active' : ''}`}
+            aria-label={`Alerts${alertCount ? `, ${alertCount} new` : ''}`}
+            aria-expanded={alertsOpen}
+            aria-controls="alerts-region"
+            onClick={() => setAlertsOpen((v) => !v)}
+          >
+            <Icon name="bell" />
+            {alertCount > 0 && <span className="alert-badge">{alertCount}</span>}
+          </button>
         </div>
       </header>
-
-      <nav
-        role="tablist"
-        aria-label="Dashboard sections"
-        className="sticky top-0 z-20 border-b"
-        style={{
-          borderColor: 'var(--hairline)',
-          background: 'color-mix(in srgb, var(--bg) 88%, transparent)',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
-        }}
-      >
-        <div className="grid grid-cols-5">
-          {TABS.map((t) => {
-            const isActive = t.id === tab;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                aria-label={t.name}
-                onClick={() => setTab(t.id)}
-                className="relative min-h-11 py-3 text-[13px] font-medium"
-                style={{ color: isActive ? 'var(--gold)' : 'var(--muted)' }}
-              >
-                {t.label}
-                {isActive && (
-                  <span
-                    className="absolute inset-x-4 bottom-0 h-[2px] rounded-full"
-                    style={{ background: 'var(--gold)' }}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
+      <nav role="tablist" aria-label="Dashboard sections" className="dashboard-nav">
+        {TABS.map((t, i) => (
+          <button
+            key={t.id}
+            id={`tab-${t.id}`}
+            type="button"
+            role="tab"
+            aria-selected={t.id === tab}
+            aria-label={t.name}
+            aria-controls="dashboard-content"
+            tabIndex={t.id === tab ? 0 : -1}
+            onClick={() => {
+              setTab(t.id);
+              window.scrollTo({ top: 0 });
+            }}
+            onKeyDown={(e) => {
+              const direction = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+              const next = direction
+                ? (i + direction + TABS.length) % TABS.length
+                : e.key === 'Home'
+                  ? 0
+                  : e.key === 'End'
+                    ? TABS.length - 1
+                    : null;
+              if (next !== null) {
+                e.preventDefault();
+                setTab(TABS[next].id);
+                document.getElementById(`tab-${TABS[next].id}`)?.focus();
+              }
+            }}
+          >
+            <Icon name={t.id} />
+            <span>{t.label}</span>
+          </button>
+        ))}
       </nav>
-
-      <main role="tabpanel" aria-label={activeTab.name} className="px-4 pb-16 pt-4">
+      <div className="page-intro">
+        <div>
+          <p className="eyebrow">
+            {formatDateLong(today)} <span>·</span> Your personal rhythm
+          </p>
+          <h1 className="font-display">
+            {tab === 'today'
+              ? greeting()
+              : tab === 'week'
+                ? 'A week in perspective.'
+                : tab === 'trends'
+                  ? 'Find your patterns.'
+                  : tab === 'streaks'
+                    ? 'Keep showing up.'
+                    : 'Make it yours.'}
+          </h1>
+          <p className="intro-description">
+            {tab === 'today'
+              ? 'A moment to check in. A clearer way forward.'
+              : tab === 'week'
+                ? 'Notice your progress. Choose your next small win.'
+                : tab === 'trends'
+                  ? 'Your data, with the context it deserves.'
+                  : tab === 'streaks'
+                    ? 'Consistency is built one small action at a time.'
+                    : 'Track what matters, on your terms.'}
+          </p>
+        </div>
+        <button className="primary-button intro-log" onClick={openCheckIn}>
+          <Icon name="plus" size={18} />
+          Check in
+        </button>
+      </div>
+      <div id="alerts-region">
+        {!dash.loading && (
+          <AlertCenter
+            metrics={dash.metrics}
+            entries={dash.entries}
+            today={today}
+            open={alertsOpen}
+            onClose={() => setAlertsOpen(false)}
+            onLog={openCheckIn}
+            onCount={setAlertCount}
+          />
+        )}
+      </div>
+      <main
+        id="dashboard-content"
+        role="tabpanel"
+        aria-labelledby={`tab-${activeTab.id}`}
+        tabIndex={0}
+        className={`dashboard-content ${tab === 'today' ? '' : 'secondary-content'}`}
+      >
         {banner && (
           <div
             className="card mb-3 flex items-start justify-between gap-3 p-3"
@@ -252,7 +320,7 @@ export default function Page() {
             lastGoogleSync={dash.syncState.lastGoogleSync}
             inboxCount={dash.syncState.todayInboxCount}
             inboxDigest={dash.syncState.inboxDigest}
-            onLog={(metricId, value, date) => void dash.logEntry(metricId, value, date)}
+            onLog={dash.logEntry}
             onSaveAll={dash.logMany}
             refresh={dash.refresh}
           />
@@ -273,6 +341,10 @@ export default function Page() {
           />
         )}
       </main>
+      <footer className="app-footer">
+        <span>life / dashboard</span>
+        <span>Progress, with perspective.</span>
+      </footer>
     </div>
   );
 }

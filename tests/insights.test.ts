@@ -90,7 +90,7 @@ describe('summarize', () => {
       (i) => i.kind === 'goals',
     );
 
-    expect(goals?.text).toContain('your one active goal');
+    expect(goals?.text).toContain('one assessed goal');
     expect(goals?.tone).toBe('good');
   });
 
