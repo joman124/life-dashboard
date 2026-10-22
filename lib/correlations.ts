@@ -38,7 +38,7 @@ export function pearson(xs: number[], ys: number[]): number {
   }
 
   if (varX === 0 || varY === 0) return 0;
-  return cov / Math.sqrt(varX * varY);
+  return Math.max(-1, Math.min(1, cov / Math.sqrt(varX * varY)));
 }
 
 export interface CorrelationResult {
@@ -48,6 +48,21 @@ export interface CorrelationResult {
   n: number;
   strength: 'Strong' | 'Moderate' | 'Weak';
   positive: boolean;
+  /** Rough Fisher interval; assumes independent observations, exploratory only. */
+  interval: [number, number];
+}
+
+export function correlationInterval(r: number, n: number): [number, number] {
+  if (n <= 3) return [-1, 1];
+  const bounded = Math.max(-0.999999, Math.min(0.999999, r));
+  const z = Math.atanh(bounded);
+  const margin = 1.96 / Math.sqrt(n - 3);
+  return [Math.tanh(z - margin), Math.tanh(z + margin)];
+}
+
+/** Narrative suggestions need a moderate signal with an interval excluding zero. */
+export function isUsefulPattern(pair: CorrelationResult): boolean {
+  return Math.abs(pair.r) >= 0.3 && (pair.interval[0] > 0 || pair.interval[1] < 0);
 }
 
 function strengthOf(r: number): CorrelationResult['strength'] {
@@ -82,7 +97,7 @@ export function topCorrelations(
     const dates = byMetric.get(e.metricId);
     if (!dates) continue;
     // YYYY-MM-DD strings compare correctly as plain strings.
-    if (e.date < windowStart || e.date > today) continue;
+    if (e.date < windowStart || e.date > today || !Number.isFinite(e.value)) continue;
     dates.set(e.date, e.value);
   }
 
@@ -104,6 +119,8 @@ export function topCorrelations(
       }
       if (xs.length < minPairs) return;
 
+      // A constant series has undefined correlation; never present it as evidence.
+      if (new Set(xs).size < 2 || new Set(ys).size < 2) return;
       const r = pearson(xs, ys);
       results.push({
         aId,
@@ -112,6 +129,7 @@ export function topCorrelations(
         n: xs.length,
         strength: strengthOf(r),
         positive: r > 0,
+        interval: correlationInterval(r, xs.length),
       });
     });
   });

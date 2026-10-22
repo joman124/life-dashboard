@@ -13,8 +13,9 @@
 
 import type { Entry, GoalDirection, Metric } from './types';
 import { addDays, lastNDates } from './dates';
-import { topCorrelations } from './correlations';
-import { meetsGoal, streakDays } from './streaks';
+import { isUsefulPattern, topCorrelations } from './correlations';
+import { meetsGoal, streakDays, streakWeeks } from './streaks';
+import { assessGoals, goalScore } from './feedback';
 import { formatGoalText, formatUnitValue } from './units';
 
 export type InsightKind = 'pattern' | 'mover' | 'goals' | 'streak' | 'coverage';
@@ -49,11 +50,12 @@ function pctChange(now: number | null, before: number | null): number | null {
 
 function valuesOn(entries: Entry[], metricId: string, dates: string[]): number[] {
   const wanted = new Set(dates);
-  const out: number[] = [];
+  const out = new Map<string, number>();
   for (const e of entries) {
-    if (e.metricId === metricId && wanted.has(e.date)) out.push(e.value);
+    if (e.metricId === metricId && wanted.has(e.date) && Number.isFinite(e.value))
+      out.set(e.date, e.value);
   }
-  return out;
+  return [...out.values()];
 }
 
 function mean(values: number[]): number | null {
@@ -83,7 +85,7 @@ function patternInsight(
     active.map((m) => m.id),
     { top: 1, today, days },
   )[0];
-  if (!pair) return null;
+  if (!pair || !isUsefulPattern(pair)) return null;
 
   const a = byId.get(pair.aId);
   const b = byId.get(pair.bId);
@@ -98,7 +100,7 @@ function patternInsight(
     tone: null,
     text:
       `Days with higher ${a.name.toLowerCase()} tend to show ${direction} ` +
-      `${b.name.toLowerCase()} — ${pair.strength.toLowerCase()} at r = ${Math.abs(pair.r).toFixed(2)} ` +
+      `${b.name.toLowerCase()} — ${pair.strength.toLowerCase()} at r = ${pair.r.toFixed(2)} ` +
       `across ${pair.n} shared days. A pattern to test with intention, not a causal claim.`,
   };
 }
@@ -107,18 +109,17 @@ function patternInsight(
  * The metric that moved most this week vs the week before. Reported with the
  * metric's own sense of "good", so Phone Pickups falling is an improvement.
  */
-function moverInsight(
-  active: Metric[],
-  entries: Entry[],
-  today: string,
-): Insight | null {
+function moverInsight(active: Metric[], entries: Entry[], today: string): Insight | null {
   const thisWeek = lastNDates(today, 7);
   const priorWeek = lastNDates(addDays(today, -7), 7);
 
   let best: { metric: Metric; pct: number; now: number } | null = null;
   for (const m of active) {
-    const now = mean(valuesOn(entries, m.id, thisWeek));
-    const before = mean(valuesOn(entries, m.id, priorWeek));
+    const currentValues = valuesOn(entries, m.id, thisWeek);
+    const priorValues = valuesOn(entries, m.id, priorWeek);
+    if (currentValues.length < 4 || priorValues.length < 4) continue;
+    const now = mean(currentValues);
+    const before = mean(priorValues);
     if (now === null || before === null || before === 0) continue;
     const pct = Math.round(((now - before) / before) * 100);
     if (pct === 0) continue;
@@ -138,15 +139,11 @@ function moverInsight(
   };
 }
 
-/** How many goals the 7-day average is currently meeting. */
+/** Goals assessed using daily evidence floors and weekly cadence. */
 function goalsInsight(active: Metric[], entries: Entry[], today: string): Insight | null {
-  const week = lastNDates(today, 7);
-  const scored: { metric: Metric; met: boolean }[] = [];
-  for (const m of active) {
-    const avg = mean(valuesOn(entries, m.id, week));
-    if (avg === null) continue;
-    scored.push({ metric: m, met: meetsGoal(avg, m.goal, m.goalDirection) });
-  }
+  const scored = assessGoals(active, entries, today)
+    .filter((a) => a.status === 'met' || a.status === 'off-track')
+    .map((a) => ({ metric: a.metric, met: a.status === 'met' }));
   if (scored.length === 0) return null;
 
   const met = scored.filter((s) => s.met);
@@ -160,8 +157,8 @@ function goalsInsight(active: Metric[], entries: Entry[], today: string): Insigh
       tone: 'good',
       text:
         scored.length === 1
-          ? 'Your 7-day average is meeting your one active goal.'
-          : `Your 7-day average is meeting all ${scored.length} active goals.`,
+          ? 'Your one assessed goal is on target.'
+          : `All ${scored.length} assessed goals are on target.`,
     };
   }
   const names = missed.map((s) => s.metric.name).join(', ');
@@ -169,7 +166,7 @@ function goalsInsight(active: Metric[], entries: Entry[], today: string): Insigh
     kind: 'goals',
     tone: met.length >= missed.length ? 'good' : 'bad',
     text:
-      `Your 7-day average meets ${met.length} of ${scored.length} ${plural}. ` +
+      `Your weekly assessment meets ${met.length} of ${scored.length} ${plural}. ` +
       `Still short: ${names}.`,
   };
 }
@@ -178,21 +175,21 @@ function goalsInsight(active: Metric[], entries: Entry[], today: string): Insigh
 function streakInsight(active: Metric[], entries: Entry[], today: string): Insight | null {
   let best: { metric: Metric; days: number } | null = null;
   for (const m of active) {
-    const days = streakDays(
-      entries.filter((e) => e.metricId === m.id),
-      m.goal,
-      m.goalDirection,
-      today,
-    );
+    const own = entries.filter((e) => e.metricId === m.id);
+    const days =
+      m.weeklyTarget !== null
+        ? streakWeeks(own, m.goal, m.goalDirection, m.weeklyTarget, today)
+        : streakDays(own, m.goal, m.goalDirection, today);
     if (days < 2) continue;
-    if (!best || days > best.days) best = { metric: m, days };
+    if (!best || (m.weeklyTarget === best.metric.weeklyTarget && days > best.days))
+      best = { metric: m, days };
   }
   if (!best) return null;
 
   return {
     kind: 'streak',
     tone: 'good',
-    text: `${best.metric.name} is your longest run right now — ${best.days} days in a row at goal.`,
+    text: `${best.metric.name}: ${best.days} ${best.metric.weeklyTarget !== null ? 'weeks' : 'days'} in a row at goal.`,
   };
 }
 
@@ -203,7 +200,7 @@ function streakInsight(active: Metric[], entries: Entry[], today: string): Insig
 function coverageInsight(active: Metric[], entries: Entry[], today: string): Insight | null {
   const window = lastNDates(today, 14);
   let worst: { metric: Metric; logged: number } | null = null;
-  for (const m of active) {
+  for (const m of active.filter((m) => m.weeklyTarget === null)) {
     const logged = valuesOn(entries, m.id, window).length;
     if (logged >= 8) continue; // enough for the correlation floor
     if (!worst || logged < worst.logged) worst = { metric: m, logged };
@@ -290,8 +287,13 @@ export function metricSummary(
   }
 
   const priorWindow = lastNDates(addDays(today, -days), days);
-  const priorAverage = mean(valuesOn(entries, metric.id, priorWindow));
-  const changePct = pctChange(average, priorAverage);
+  const priorValues = valuesOn(entries, metric.id, priorWindow);
+  const priorAverage = mean(priorValues);
+  const minimum = Math.min(4, days);
+  const changePct =
+    values.length >= minimum && priorValues.length >= minimum
+      ? pctChange(average, priorAverage)
+      : null;
 
   const atGoal = values.filter((v) => meetsGoal(v, metric.goal, metric.goalDirection)).length;
   const good = changePct === null ? null : isGood(changePct, metric.goalDirection);
@@ -354,8 +356,10 @@ function goalGaps(
 ): { metric: Metric; average: number; gapPct: number }[] {
   const week = lastNDates(today, 7);
   const gaps: { metric: Metric; average: number; gapPct: number }[] = [];
-  for (const m of active) {
-    const average = mean(valuesOn(entries, m.id, week));
+  for (const m of active.filter((m) => m.weeklyTarget === null)) {
+    const values = valuesOn(entries, m.id, week);
+    if (values.length < 4) continue;
+    const average = mean(values);
     if (average === null) continue;
     if (meetsGoal(average, m.goal, m.goalDirection)) continue;
     if (m.goal === 0) continue; // no meaningful proportional gap
@@ -374,8 +378,7 @@ function goalGaps(
  *   1. Close the widest goal gap — stated as the actual daily delta required.
  *   2. Fix the metric too sparsely logged to analyse at all.
  *   3. Pull the lever the user's own correlations point at.
- * When every goal is met, the recommendation is to raise a goal rather than to
- * invent a problem.
+ * When every assessed goal is met, support maintaining the current rhythm.
  */
 function buildRecommendations(
   active: Metric[],
@@ -399,10 +402,10 @@ function buildRecommendations(
     });
   }
 
-  // A metric logged fewer than 8 of the last 14 days can't enter a correlation,
-  // so the fix is logging discipline before anything else about its level.
+  // Sparse observations weaken comparisons; describe coverage before suggesting changes.
   const fortnight = lastNDates(today, 14);
   const sparse = active
+    .filter((m) => m.weeklyTarget === null)
     .map((m) => ({ metric: m, logged: valuesOn(entries, m.id, fortnight).length }))
     .filter((s) => s.logged < 8)
     .sort((a, b) => a.logged - b.logged)[0];
@@ -411,7 +414,7 @@ function buildRecommendations(
       metricId: sparse.metric.id,
       text:
         `Log ${sparse.metric.name} more often — ${sparse.logged} of the last 14 days. ` +
-        `It needs 8 shared days before it can appear in any correlation.`,
+        `More consistent entries will make comparisons clearer; correlations need 8 shared days.`,
     });
   }
 
@@ -423,7 +426,7 @@ function buildRecommendations(
       active.map((m) => m.id),
       { today, top: 3 },
     ).find((p) => p.aId === worst.metric.id || p.bId === worst.metric.id);
-    if (pair) {
+    if (pair && isUsefulPattern(pair)) {
       const otherId = pair.aId === worst.metric.id ? pair.bId : pair.aId;
       const other = byId.get(otherId);
       if (other) {
@@ -432,34 +435,27 @@ function buildRecommendations(
           text:
             `Try moving ${other.name} first: across ${pair.n} shared days it tracks ` +
             `${pair.positive ? 'with' : 'against'} ${worst.metric.name} at r = ` +
-            `${Math.abs(pair.r).toFixed(2)}. Correlation, not proof — treat it as the experiment to run.`,
+            `${pair.r.toFixed(2)}. Correlation, not proof — treat it as the experiment to run.`,
         });
       }
     }
   }
 
-  if (out.length === 0) {
-    // Everything is at goal. The honest recommendation is to raise the bar on
-    // whatever is clearing it by the widest margin, not to manufacture a worry.
-    const week = lastNDates(today, 7);
-    let best: { metric: Metric; average: number; marginPct: number } | null = null;
-    for (const m of active) {
-      const average = mean(valuesOn(entries, m.id, week));
-      if (average === null || m.goal === 0) continue;
-      const marginPct =
-        m.goalDirection === '>='
-          ? ((average - m.goal) / m.goal) * 100
-          : ((m.goal - average) / m.goal) * 100;
-      if (!best || marginPct > best.marginPct) best = { metric: m, average, marginPct };
-    }
-    if (best) {
-      out.push({
-        metricId: best.metric.id,
-        text:
-          `Every goal is being met. ${best.metric.name} is clearing its target by ` +
-          `${Math.round(best.marginPct)}% — raise that goal before the number stops meaning anything.`,
-      });
-    }
+  const weeklyPending = assessGoals(active, entries, today).find(
+    (a) => a.metric.weeklyTarget !== null && a.status !== 'met',
+  );
+  if (weeklyPending) {
+    const remaining = weeklyPending.metric.weeklyTarget! - weeklyPending.hits;
+    out.push({
+      metricId: weeklyPending.metric.id,
+      text: `${weeklyPending.metric.name}: ${weeklyPending.hits} of ${weeklyPending.metric.weeklyTarget} target days met this week. ${remaining} more goal-hit ${remaining === 1 ? 'day' : 'days'} needed for this weekly target.`,
+    });
+  }
+  if (out.length === 0 && assessGoals(active, entries, today).every((a) => a.status === 'met')) {
+    out.push({
+      metricId: null,
+      text: 'Your assessed goals are on target. Keep the rhythm that is working; review targets only when they still fit your needs.',
+    });
   }
 
   return out.slice(0, MAX_RECOMMENDATIONS);
@@ -475,24 +471,22 @@ export function weekReview(metrics: Metric[], entries: Entry[], today: string): 
   const byId = new Map(metrics.map((m) => [m.id, m]));
   const week = lastNDates(today, 7);
 
-  const scored = active
-    .map((m) => ({ metric: m, average: mean(valuesOn(entries, m.id, week)) }))
-    .filter((s): s is { metric: Metric; average: number } => s.average !== null);
-
-  if (scored.length === 0) {
+  const assessments = assessGoals(active, entries, today);
+  const assessedScore = goalScore(assessments);
+  if (assessedScore === null) {
     return {
       score: 0,
-      headline: 'Not enough logged this week to score it yet.',
+      headline: 'More check-ins will make your weekly read clearer.',
       support: [],
-      recommendations: [],
+      recommendations: entries.some(
+        (e) => active.some((m) => m.id === e.metricId) && week.includes(e.date),
+      )
+        ? buildRecommendations(active, entries, today, byId)
+        : [],
       hasData: false,
     };
   }
-
-  const met = scored.filter((s) =>
-    meetsGoal(s.average, s.metric.goal, s.metric.goalDirection),
-  ).length;
-  const score = Math.round((met / scored.length) * 100);
+  const score = assessedScore;
 
   const headline =
     score >= 75

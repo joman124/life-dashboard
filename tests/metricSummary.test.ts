@@ -59,7 +59,10 @@ describe('metricSummary', () => {
 
   it('compares against the equally-long window before it', () => {
     // Prior 5 days average 5, recent 5 days average 10 → +100%.
-    const entries = [...run('sleep', [5, 5, 5, 5, 5], addDays(TODAY, -5)), ...run('sleep', [10, 10, 10, 10, 10])];
+    const entries = [
+      ...run('sleep', [5, 5, 5, 5, 5], addDays(TODAY, -5)),
+      ...run('sleep', [10, 10, 10, 10, 10]),
+    ];
     const out = metricSummary(metric('sleep'), entries, TODAY, 5);
     expect(out.changePct).toBe(100);
     expect(out.text).toContain('up 100%');
@@ -145,13 +148,13 @@ describe('weekReview', () => {
     expect(texts.some((t) => t.includes('Log Mood more often'))).toBe(true);
   });
 
-  it('recommends raising a goal when every goal is already met', () => {
-    // A full fortnight logged, comfortably over a goal of 5 — nothing to fix,
-    // so the only honest recommendation left is to raise the bar.
+  it('supports maintaining goals rather than automatically escalating them', () => {
+    // Meeting a goal does not establish that a larger health target is better.
     const entries = run('sleep', Array<number>(14).fill(10));
     const out = weekReview([metric('sleep', { goal: 5 })], entries, TODAY);
     expect(out.recommendations).toHaveLength(1);
-    expect(out.recommendations[0].text).toContain('raise that goal');
+    expect(out.recommendations[0].text).toContain('Keep the rhythm');
+    expect(out.recommendations[0].text).not.toContain('raise');
   });
 
   it('prioritises logging discipline over raising a goal', () => {

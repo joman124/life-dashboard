@@ -5,8 +5,9 @@
 import type { Entry, Metric } from '@/lib/types';
 import { addDays, dayLabel, lastNDates } from '@/lib/dates';
 import { deltaVsBaseline } from '@/lib/deltas';
-import { avg, loggedValues, valueMap, weeklyScore } from '../data';
+import { avg, loggedValues, valueMap } from '../data';
 import { formatValue, unitSuffix } from '../format';
+import { assessGoals, goalScore } from '@/lib/feedback';
 import DeltaPill from '../DeltaPill';
 import BarChart, { type BarDatum } from '../BarChart';
 
@@ -20,13 +21,17 @@ export default function Week({
   today: string;
 }) {
   const active = metrics.filter((m) => m.active);
-  const score = weeklyScore(metrics, entries, today);
+  const assessments = assessGoals(metrics, entries, today);
+  const score = goalScore(assessments);
+  const judged = assessments.filter((a) => a.status === 'met' || a.status === 'off-track');
   const headline =
-    score >= 75
-      ? 'Strong week.'
-      : score >= 50
-        ? 'Solid week — one or two metrics lagging.'
-        : 'Rebuild week — pick one metric to win.';
+    score === null
+      ? 'Your picture is taking shape.'
+      : score >= 75
+        ? 'Strong week.'
+        : score >= 50
+          ? 'Solid week — one or two metrics lagging.'
+          : 'Rebuild week — pick one metric to win.';
 
   const weekDates = lastNDates(today, 7);
   const prevDates = lastNDates(addDays(today, -7), 7);
@@ -35,18 +40,31 @@ export default function Week({
     <div className="space-y-3">
       <section className="card p-4">
         <div className="eyebrow">Weekly scorecard</div>
-        <div className="mt-2 font-display text-[44px] leading-none" style={{ color: 'var(--gold)' }}>
-          {score}
-          <span className="text-[22px]">%</span>
+        <div
+          className="mt-2 font-display text-[44px] leading-none"
+          style={{ color: 'var(--gold)' }}
+        >
+          {score ?? '—'}
+          {score !== null && <span className="text-[22px]">%</span>}
         </div>
         <h2 className="font-display mt-2 text-[19px] leading-snug">{headline}</h2>
 
+        <p className="mt-3 text-[12px] leading-relaxed text-[color:var(--muted)]">
+          {judged.length} of {active.length} active goals assessed. Daily averages need 4 logged
+          days in the last 7. Weekly habits count goal-hit days since Monday; an unfinished weekly
+          target stays in progress until Sunday. Missing entries are unknown.
+        </p>
         <div className="mt-4 grid grid-cols-2 gap-2">
           {active.map((m) => {
             const map = valueMap(entries, m.id);
-            const thisAvg = avg(loggedValues(map, weekDates));
+            const thisValues = loggedValues(map, weekDates);
+            const thisAvg = avg(thisValues);
+            const assessment = assessments.find((a) => a.metric.id === m.id)!;
             const prevVals = loggedValues(map, prevDates);
-            const delta = deltaVsBaseline(thisAvg, prevVals, m.goalDirection);
+            const delta =
+              m.weeklyTarget === null && thisValues.length >= 4 && prevVals.length >= 4
+                ? deltaVsBaseline(thisAvg, prevVals, m.goalDirection)
+                : null;
             const suffix = unitSuffix(m.unit);
             return (
               <div
@@ -76,6 +94,11 @@ export default function Week({
                   </span>
                   <DeltaPill delta={delta} />
                 </div>
+                <p className="mt-2 text-[10px] text-[color:var(--muted)]">
+                  {m.weeklyTarget === null
+                    ? `${thisValues.length}/7 days logged · average`
+                    : `${assessment.hits}/${m.weeklyTarget} goal-hit days this week`}
+                </p>
               </div>
             );
           })}

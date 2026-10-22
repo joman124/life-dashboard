@@ -97,8 +97,8 @@ describe('per-metric week to date', () => {
   test('an unlogged day stays null rather than becoming a zero', () => {
     // A zero is a real, terrible day; a null is a day you did not log. Averaging
     // them together would quietly invent bad news.
-    const m = buildBrief([metric('deep-work')], [on('deep-work', MONDAY, 6)], WEDNESDAY)
-      .week.metrics[0];
+    const m = buildBrief([metric('deep-work')], [on('deep-work', MONDAY, 6)], WEDNESDAY).week
+      .metrics[0];
 
     expect(m?.average).toBe(6);
     expect(m?.days.map((d) => d.value)).toEqual([6, null, null]);
@@ -125,10 +125,7 @@ describe('per-metric week to date', () => {
 
   test('a fall is good news for a "at most" metric', () => {
     const pickups = metric('phone-pickups', { goal: 50, goalDirection: '<=', unit: 'count' });
-    const entries = [
-      on('phone-pickups', MONDAY, 40),
-      on('phone-pickups', '2026-08-17', 80),
-    ];
+    const entries = [on('phone-pickups', MONDAY, 40), on('phone-pickups', '2026-08-17', 80)];
     const m = buildBrief([pickups], entries, WEDNESDAY).week.metrics[0];
 
     expect(m?.changePct).toBe(-50);
@@ -246,10 +243,7 @@ describe('focus for today', () => {
   test('stays quiet about a streak already secured today', () => {
     // Nudging someone to protect a run they have already logged is noise.
     const metrics = [metric('deep-work', { goal: 4 }), metric('sleep', { goal: 6 })];
-    const entries = [
-      on('deep-work', MONDAY, 1),
-      ...run('sleep', [7, 7, 7, 7, 7], WEDNESDAY),
-    ];
+    const entries = [on('deep-work', MONDAY, 1), ...run('sleep', [7, 7, 7, 7, 7], WEDNESDAY)];
     const focus = buildBrief(metrics, entries, WEDNESDAY).focus;
 
     expect(focus.find((f) => f.reason === 'streak')).toBeUndefined();
@@ -284,11 +278,7 @@ describe('focus for today', () => {
 
   test('never names the same metric twice', () => {
     const metrics = [metric('deep-work'), metric('sleep', { goal: 6 }), metric('steps')];
-    const entries = [
-      on('deep-work', MONDAY, 1),
-      on('sleep', MONDAY, 2),
-      on('steps', MONDAY, 1),
-    ];
+    const entries = [on('deep-work', MONDAY, 1), on('sleep', MONDAY, 2), on('steps', MONDAY, 1)];
     const ids = buildBrief(metrics, entries, WEDNESDAY).focus.map((f) => f.metricId);
 
     expect(new Set(ids).size).toBe(ids.length);
@@ -301,14 +291,14 @@ describe('focus for today', () => {
     expect(buildBrief(metrics, entries, WEDNESDAY).focus.length).toBeLessThanOrEqual(3);
   });
 
-  test('recommends raising a goal rather than inventing a worry', () => {
+  test('recommends maintaining goals rather than automatic escalation', () => {
     const metrics = [metric('deep-work', { goal: 4 })];
     const entries = run('deep-work', Array(14).fill(8), WEDNESDAY);
     const focus = buildBrief(metrics, entries, WEDNESDAY).focus;
 
     expect(focus).toHaveLength(1);
-    expect(focus[0]?.reason).toBe('raise');
-    expect(focus[0]?.text).toContain('raise that goal');
+    expect(focus[0]?.reason).toBe('maintain');
+    expect(focus[0]?.text).toContain('Keep the rhythm');
   });
 
   test('asks for a first entry when nothing has been logged at all', () => {

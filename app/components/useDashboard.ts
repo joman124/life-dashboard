@@ -4,7 +4,7 @@
 // Fetches metrics + entries (days=31) + today's timeline + sync-state on
 // mount, exposes refresh(), and re-fetches after every mutation.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Entry, InboxMessage, Metric, TimelineItem } from '@/lib/types';
 import { todayISO } from '@/lib/dates';
 
@@ -66,8 +66,10 @@ export function useDashboard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const refreshSequence = useRef(0);
 
   const refresh = useCallback(async () => {
+    const sequence = ++refreshSequence.current;
     try {
       const [m, e, t, s] = await Promise.all([
         fetchJson<Metric[]>('/api/metrics'),
@@ -79,20 +81,32 @@ export function useDashboard() {
         fetchJson<TimelineItem[]>(`/api/timeline?date=${todayISO()}`),
         fetchJson<SyncState>('/api/sync-state'),
       ]);
+      if (sequence !== refreshSequence.current) return;
       setMetrics(m);
       setEntries(e);
       setTimeline(t);
       setSyncState(s);
       setLoadError(null);
     } catch (err) {
-      setLoadError(errorMessage(err, 'Failed to load dashboard data.'));
+      if (sequence === refreshSequence.current)
+        setLoadError(errorMessage(err, 'Failed to load dashboard data.'));
     } finally {
-      setLoading(false);
+      if (sequence === refreshSequence.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void refresh();
+    // Pick up webhook imports and edits made elsewhere without discarding drafts.
+    const check = () => {
+      if (!document.hidden) void refresh();
+    };
+    window.addEventListener('focus', check);
+    const timer = window.setInterval(check, 60_000);
+    return () => {
+      window.removeEventListener('focus', check);
+      window.clearInterval(timer);
+    };
   }, [refresh]);
 
   /**

@@ -1,6 +1,6 @@
 # Life Dashboard
 
-Life Dashboard is a personal command center for your day, your week, and your habits — a mobile-first, single-user web app with a dark editorial look and a gold accent. Five tabs (**Today**, **Week**, **Trends**, **Streaks**, **Track**) turn the metrics you care about — deep work, sleep, steps, phone pickups, mood, and anything custom you add — into sparklines, scorecards, streaks, and plain-language correlations like "on days your sleep is higher, your deep work tends to be higher too." It runs entirely on your machine: a local Next.js server and a single SQLite file. No cloud account, no signup, no monthly fee — just your data, on your computer. Add it to your phone's home screen and it launches like a native app.
+Life Dashboard is a personal command center for your day, your week, and your habits — a mobile-first, single-user web app with a dark editorial look and a gold accent. Five tabs (**Today**, **Week**, **Trends**, **Streaks**, **Settings**) turn the metrics you care about — deep work, sleep, steps, phone pickups, mood, and anything custom you add — into sparklines, scorecards, streaks, and plain-language correlations like "on days your sleep is higher, your deep work tends to be higher too." It runs entirely on your machine: a local Next.js server and a single SQLite file. No cloud account, no signup, no monthly fee — just your data, on your computer. Add it to your phone's home screen and it launches like a native app.
 
 ## Requirements
 
@@ -21,22 +21,39 @@ Then open **http://localhost:3000**.
 
 On the very first run, Life Dashboard seeds 30 days of realistic sample data automatically — so Today, Week, Trends, and Streaks all have something to show you immediately, with no setup required. Your data lives in `data/life-dashboard.db` (a single SQLite file, gitignored) and survives server restarts.
 
-**Once you start logging for real, clear the sample data**: Track → Your data → **Clear all logged history**. It deletes every entry but keeps your metrics, so your streaks and correlations reflect only you. Until you do, the numbers on your dashboard are partly generated.
+**Once you start logging for real, clear the sample data**: Settings → Your data → **Clear all logged history**. It deletes every entry but keeps your metrics, so your streaks and correlations reflect only you. Until you do, the numbers on your dashboard are partly generated.
 
 ## Everyday use
 
-**Logging.** The Today tab has a stepper for each active metric. Above them is a strip of the last seven days — tap any day to log or correct it, so forgetting to open the app on Tuesday doesn't cost you Tuesday. A dot under a day means it already has at least one entry, which makes gaps in the week obvious at a glance. Streaks are forgiving about *today* specifically: an unlogged today doesn't break a run, but a logged miss does.
+**Mobile check-in.** Today opens in **Type values** mode, with a numeric keyboard, large step buttons, and a save bar above the bottom navigation. The desktop layout puts feedback beside your entry form.
 
-**Steppers or form.** The log card has a **Steppers / Form** toggle. Steppers suit nudging deep work by half an hour; the form suits typing `9336` steps or `2.4` hours of screen time. The form arrives **pre-filled** with whatever that day already holds — a Shortcut import, a Google Calendar sync, or an earlier manual entry — so it is a correction pass over what synced, not a blank slate. Leave a field empty to leave that day untouched, then **Save all** writes everything in one go.
+1. Open **Today** and select a day in the seven-day strip, or use **Need to backfill?** to choose an older date.
+2. Tap a metric's number and type its value. Hours accept `7:30` or `7.5`; counts accept `9,336`; decimal-comma keyboards can enter `7,5`. Tap **Last** to reuse the most recent earlier value, or use **− / +** to adjust it.
+3. Press the keyboard's **Next** key to move to the next metric. Blank fields leave existing records untouched; type `0` to record zero.
+4. Tap **Save check-in**. Wait for the saved confirmation. If a write fails, the form keeps your draft and shows the error so you can retry. Partially successful saves report how many succeeded.
 
-**Reading the trends.** The Trends tab opens with a written summary — the strongest correlation, the biggest mover versus last week, how many goals your 7-day average is meeting, your longest current streak, and any metric logged too rarely to be trusted. It is plain arithmetic over your own entries, not a model, so the same data always produces the same words.
+Drafts are stored per date on this browser and survive reloads, date changes, and tab changes. They are not synced to other devices. If browser storage is unavailable, the form says so. Untouched fields follow fresh server values; your typed drafts stay intact. The dashboard refreshes when it regains focus and every minute while visible to pick up webhook imports. **Quick adjust** keeps the original immediate-save cards available.
 
-**Changing what you track.** Track → each metric row has **Edit** (emoji, name, goal, direction) and, inside that, **Delete**. The distinction matters:
+**Alerts.** Tap the **bell** in the top-right corner to see reminders, goal nudges, and data-coverage notices.
+
+1. Open the **bell**, then turn **Daily check-in reminder** on or off.
+2. Set **Remind me at**. The time follows the dashboard's existing fixed **UTC−7** timezone, stated beside the control. A completed weekly habit does not need another check-in that day.
+3. Turn **Goal alerts** on to flag a daily metric outside its target on three consecutive completed days. Missing entries and unfinished today never count as failed days; weekly habits are judged by their cadence.
+4. Optionally tap **Enable** beside **Browser notifications**, then allow notifications in the browser prompt. Notifications contain a generic nudge without metric values. Unsupported or denied notifications leave in-app alerts available.
+5. Tap an alert's **×** to dismiss it for the day. Preferences and dismissals stay on this device.
+
+Browser notifications require HTTPS (or localhost), browser support, and the page still running. They are **not background push** and cannot deliver after the page is closed. Mobile operating systems can suspend background tabs. At most one generic browser notification is sent per day per browser.
+
+**Reading the feedback.** Today, Week, and Trends share the same goal assessment. Daily goals use the average of observed values in the last seven days, requiring at least **four logged days** per metric. Weekly habits count days meeting the per-day target since Monday. Unfinished weekly habits remain in progress until Sunday; at week end, missing records that could still change the verdict keep the result unknown. Sparse daily metrics and in-progress weekly habits are excluded from the score; the interface shows the assessed denominator and each metric's status. Missing data remains unknown, never zero. A score of 100% means all **assessed** goals meet their targets, not that all entries are complete.
+
+Trend comparisons require enough observations in both periods. Constant series are excluded from correlations, and narrative suggestions require a moderate association with a rough 95% Fisher interval excluding zero. Correlation cards show signed `r`, shared-day count, and uncertainty. These intervals assume independent observations and do not correct for trying many metric pairs: daily habits can exaggerate apparent patterns. Associations are exploratory and never prove causation. Meeting every target suggests maintaining the rhythm, not automatically increasing health goals. All feedback is deterministic arithmetic; no model or API key is needed. The outbound morning brief retains its separate calendar-week-to-date window.
+
+**Changing what you track.** Settings → each metric row has **Edit** (emoji, name, goal, direction) and, inside that, **Delete**. The distinction matters:
 
 - The **switch** stops tracking a metric but keeps all of its history. This is what you want almost always.
 - **Delete** permanently removes the metric *and every entry ever logged against it*. It asks first, and it cannot be undone.
 
-**Adding your own.** Track → *Add your own*. Type a name and an emoji is chosen for you from a keyword list (`Meditation` → 🧘, `Cold plunge` → 🧊); override it if you'd rather. New metrics appear across every tab immediately.
+**Adding your own.** Settings → *Add your own*. Type a name and an emoji is chosen for you from a keyword list (`Meditation` → 🧘, `Cold plunge` → 🧊); override it if you'd rather. New metrics appear across every tab immediately.
 
 ## Backing up and restoring
 
