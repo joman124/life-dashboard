@@ -36,7 +36,15 @@ const PUBLIC_PATHS = new Set([
   '/login',
   '/api/login',
   '/api/health-import',
+  // /api/brief is the read counterpart to health-import: the morning-brief
+  // scheduled task pulls the day's numbers with no browser session, and the
+  // route authenticates itself with its own brief token (lib/briefToken.ts).
+  // Same reasoning as health-import — gating it here would break the cron.
   '/api/brief',
+  // /api/streak-check is the 8pm streak-at-risk nudge, run by the vercel.json
+  // cron with no browser session; it self-authenticates (STREAK_CHECK_TOKEN /
+  // Vercel's CRON_SECRET). Gating it here would break the scheduled run.
+  '/api/streak-check',
   '/manifest.webmanifest',
   '/apple-touch-icon.png',
   '/icon-192.png',

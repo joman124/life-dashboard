@@ -24,6 +24,9 @@
  *                             flattens everything to text anyway, and for
  *                             checking by eye that this works before wiring
  *                             anything to it.
+ *
+ * Both formats carry the week's focus (lib/weeklyFocusStore) and its one-line
+ * on track / behind scorecard (lib/weeklyFocus), or null when no focus is set.
  */
 import { NextResponse } from 'next/server';
 import { extractBearerToken } from '@/lib/apiToken';
@@ -32,6 +35,8 @@ import { buildBrief, renderBriefText } from '@/lib/brief';
 import { todayISO } from '@/lib/dates';
 import { listAllEntries, listMetrics, setSyncValue } from '@/lib/db';
 import { jsonError, toErrorMessage } from '@/lib/http';
+import { focusScorecard } from '@/lib/weeklyFocus';
+import { getWeeklyFocus } from '@/lib/weeklyFocusStore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -52,9 +57,14 @@ export async function GET(req: Request) {
       return jsonError(`Unknown format "${format}". Use format=json or format=text.`, 400);
     }
 
-    const brief = buildBrief(await listMetrics(), await listAllEntries(), todayISO(), {
-      dashboardUrl: url.origin,
-    });
+    const [metrics, entries, weeklyFocus] = await Promise.all([
+      listMetrics(),
+      listAllEntries(),
+      getWeeklyFocus(),
+    ]);
+    const today = todayISO();
+    const brief = buildBrief(metrics, entries, today, { dashboardUrl: url.origin });
+    const scorecard = focusScorecard(weeklyFocus, metrics, entries, today);
 
     // A write on a GET, deliberately: without it there is no way to tell a
     // scheduled task that is quietly 401ing from one that simply has not fired
@@ -62,7 +72,16 @@ export async function GET(req: Request) {
     await setSyncValue('last_brief_fetch', new Date().toISOString());
 
     if (format === 'text') {
-      return new NextResponse(renderBriefText(brief), {
+      const focusText = weeklyFocus
+        ? `
+
+## This week's focus
+
+${weeklyFocus}` + (scorecard ? `
+
+${scorecard.text}` : '')
+        : '';
+      return new NextResponse(renderBriefText(brief) + focusText, {
         headers: {
           'content-type': 'text/plain; charset=utf-8',
           // The brief is a snapshot of a day in progress. A cached copy served
@@ -72,7 +91,10 @@ export async function GET(req: Request) {
       });
     }
 
-    return NextResponse.json(brief, { headers: { 'cache-control': 'no-store' } });
+    return NextResponse.json(
+      { ...brief, weeklyFocus: weeklyFocus || null, focusScorecard: scorecard },
+      { headers: { 'cache-control': 'no-store' } },
+    );
   } catch (e) {
     return jsonError(toErrorMessage(e), 500);
   }

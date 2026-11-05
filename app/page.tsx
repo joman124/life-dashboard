@@ -320,12 +320,19 @@ export default function Page() {
             lastGoogleSync={dash.syncState.lastGoogleSync}
             inboxCount={dash.syncState.todayInboxCount}
             inboxDigest={dash.syncState.inboxDigest}
+            weeklyFocus={dash.syncState.weeklyFocus}
             onLog={dash.logEntry}
             onSaveAll={dash.logMany}
+            onSaveWeeklyFocus={dash.saveWeeklyFocus}
             refresh={dash.refresh}
           />
         ) : tab === 'week' ? (
-          <Week metrics={dash.metrics} entries={dash.entries} today={today} />
+          <Week
+            metrics={dash.metrics}
+            entries={dash.entries}
+            today={today}
+            weeklyFocus={dash.syncState.weeklyFocus}
+          />
         ) : tab === 'trends' ? (
           <Trends metrics={dash.metrics} entries={dash.entries} today={today} />
         ) : tab === 'streaks' ? (
