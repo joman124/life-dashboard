@@ -10,15 +10,18 @@ import { formatValue, unitSuffix } from '../format';
 import { assessGoals, goalScore } from '@/lib/feedback';
 import DeltaPill from '../DeltaPill';
 import BarChart, { type BarDatum } from '../BarChart';
+import { focusScorecard } from '@/lib/weeklyFocus';
 
 export default function Week({
   metrics,
   entries,
   today,
+  weeklyFocus,
 }: {
   metrics: Metric[];
   entries: Entry[];
   today: string;
+  weeklyFocus: string;
 }) {
   const active = metrics.filter((m) => m.active);
   const assessments = assessGoals(metrics, entries, today);
@@ -32,6 +35,8 @@ export default function Week({
         : score >= 50
           ? 'Solid week — one or two metrics lagging.'
           : 'Rebuild week — pick one metric to win.';
+
+  const focus = focusScorecard(weeklyFocus, metrics, entries, today);
 
   const weekDates = lastNDates(today, 7);
   const prevDates = lastNDates(addDays(today, -7), 7);
@@ -48,6 +53,14 @@ export default function Week({
           {score !== null && <span className="text-[22px]">%</span>}
         </div>
         <h2 className="font-display mt-2 text-[19px] leading-snug">{headline}</h2>
+        {focus && (
+          <p className="mt-2 text-[13px] leading-snug">
+            <span style={{ color: 'var(--muted)' }}>Focus: </span>
+            <span style={{ color: focus.status === 'on-track' ? 'var(--green)' : 'var(--red)' }}>
+              {focus.text}
+            </span>
+          </p>
+        )}
 
         <p className="mt-3 text-[12px] leading-relaxed text-[color:var(--muted)]">
           {judged.length} of {active.length} active goals assessed. Daily averages need 4 logged

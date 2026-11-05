@@ -16,6 +16,8 @@ export interface SyncState {
   todayInboxCount: number | null;
   /** Newest few inbox messages for today. Empty until a sync has run. */
   inboxDigest: InboxMessage[];
+  /** The week's one-line intention; '' until the user sets it. */
+  weeklyFocus: string;
 }
 
 export interface NewMetricInput {
@@ -62,6 +64,7 @@ export function useDashboard() {
     lastGoogleSync: null,
     todayInboxCount: null,
     inboxDigest: [],
+    weeklyFocus: '',
   });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -267,6 +270,30 @@ export function useDashboard() {
     [refresh],
   );
 
+  /**
+   * Set the week's focus: optimistic local update, POST, then refresh. Resolves
+   * to an error message, or null on success, so the input can surface a failure
+   * without losing what was typed.
+   */
+  const saveWeeklyFocus = useCallback(
+    async (text: string): Promise<string | null> => {
+      setSyncState((prev) => ({ ...prev, weeklyFocus: text }));
+      try {
+        await fetchJson<{ weeklyFocus: string }>('/api/sync-state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ weeklyFocus: text }),
+        });
+        await refresh();
+        return null;
+      } catch (err) {
+        await refresh();
+        return errorMessage(err, 'Could not save this week’s focus.');
+      }
+    },
+    [refresh],
+  );
+
   const dismissActionError = useCallback(() => setActionError(null), []);
 
   return {
@@ -284,6 +311,7 @@ export function useDashboard() {
     addMetric,
     editMetric,
     removeMetric,
+    saveWeeklyFocus,
     dismissActionError,
   };
 }

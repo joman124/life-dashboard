@@ -324,6 +324,22 @@ export function metricSummary(
   };
 }
 
+/**
+ * Signed distance of a value from a metric's goal, as a percent: > 0 means short
+ * of the goal (a real gap), <= 0 means at or past it. Returns null when the goal
+ * is 0, where a proportional gap has no meaning. Direction-aware — for a
+ * "keep it low" metric (<=), being over the goal is the positive gap.
+ *
+ * Exported so callers can rank metrics worst-gap-first (the morning brief) with
+ * the same arithmetic goalGaps() ranks the week review by.
+ */
+export function goalGapPercent(metric: Metric, value: number): number | null {
+  if (metric.goal === 0) return null;
+  return metric.goalDirection === '>='
+    ? ((metric.goal - value) / metric.goal) * 100
+    : ((value - metric.goal) / metric.goal) * 100;
+}
+
 /* ------------------------------------------------------------- week review */
 
 export interface Recommendation {
@@ -363,11 +379,10 @@ function goalGaps(
     if (average === null) continue;
     if (meetsGoal(average, m.goal, m.goalDirection)) continue;
     if (m.goal === 0) continue; // no meaningful proportional gap
-    // Always positive: how far short (>=) or how far over (<=), as a percent.
-    const gapPct =
-      m.goalDirection === '>='
-        ? ((m.goal - average) / m.goal) * 100
-        : ((average - m.goal) / m.goal) * 100;
+    // Always positive here: how far short (>=) or how far over (<=), as a
+    // percent. goal === 0 is skipped above, so the shared helper never returns
+    // null on this path.
+    const gapPct = goalGapPercent(m, average) as number;
     gaps.push({ metric: m, average, gapPct });
   }
   return gaps.sort((a, b) => b.gapPct - a.gapPct);

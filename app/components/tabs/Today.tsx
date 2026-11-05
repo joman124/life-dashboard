@@ -16,6 +16,7 @@ import MetricCard from '../MetricCard';
 import LogDayBar, { type LogMode } from '../LogDayBar';
 import QuickLogForm, { type PendingEntry } from '../QuickLogForm';
 import DayBrief from '../DayBrief';
+import WeeklyFocus from '../WeeklyFocus';
 
 /** How many days back the strip lets you reach, including today. */
 const DAY_WINDOW = 7;
@@ -28,8 +29,10 @@ export default function Today({
   lastGoogleSync,
   inboxCount,
   inboxDigest,
+  weeklyFocus,
   onLog,
   onSaveAll,
+  onSaveWeeklyFocus,
   refresh,
 }: {
   metrics: Metric[];
@@ -39,8 +42,10 @@ export default function Today({
   lastGoogleSync: string | null;
   inboxCount: number | null;
   inboxDigest: InboxMessage[];
+  weeklyFocus: string;
   onLog: (metricId: string, value: number, date: string) => Promise<void>;
   onSaveAll: (date: string, values: PendingEntry[]) => Promise<string | null>;
+  onSaveWeeklyFocus: (text: string) => Promise<string | null>;
   refresh: () => Promise<void>;
 }) {
   const [date, setDate] = useState(today);
@@ -57,6 +62,10 @@ export default function Today({
   return (
     <div className="today-layout">
       <div id="daily-check-in" className="check-in-column">
+        {/* Keyed by the stored value so a refresh that brings a new focus replaces
+            the in-place draft rather than stranding the old text. */}
+        <WeeklyFocus key={weeklyFocus} value={weeklyFocus} onSave={onSaveWeeklyFocus} />
+
         <LogDayBar
           days={days}
           selected={selected}
