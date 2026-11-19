@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Entry, InboxMessage, Metric, TimelineItem } from '@/lib/types';
 import { todayISO } from '@/lib/dates';
+import type { FocusChecks, FocusRating } from '@/lib/focusCheck';
 
 /** Matches the `days` ceiling enforced by GET /api/entries. */
 const MAX_ENTRY_DAYS = 3650;
@@ -18,6 +19,8 @@ export interface SyncState {
   inboxDigest: InboxMessage[];
   /** The week's one-line intention; '' until the user sets it. */
   weeklyFocus: string;
+  /** End-of-week focus ratings, keyed by week Monday. */
+  focusChecks: FocusChecks;
 }
 
 export interface NewMetricInput {
@@ -65,6 +68,7 @@ export function useDashboard() {
     todayInboxCount: null,
     inboxDigest: [],
     weeklyFocus: '',
+    focusChecks: {},
   });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -294,6 +298,24 @@ export function useDashboard() {
     [refresh],
   );
 
+  /** Rate this week against its focus. Resolves to an error message, or null on success. */
+  const saveFocusCheck = useCallback(
+    async (rating: FocusRating, note: string): Promise<string | null> => {
+      try {
+        await fetchJson<{ focusChecks: FocusChecks }>('/api/sync-state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ focusCheck: { rating, note } }),
+        });
+        await refresh();
+        return null;
+      } catch (err) {
+        return errorMessage(err, 'Could not save this week’s check.');
+      }
+    },
+    [refresh],
+  );
+
   const dismissActionError = useCallback(() => setActionError(null), []);
 
   return {
@@ -312,6 +334,7 @@ export function useDashboard() {
     editMetric,
     removeMetric,
     saveWeeklyFocus,
+    saveFocusCheck,
     dismissActionError,
   };
 }

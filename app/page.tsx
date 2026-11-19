@@ -332,6 +332,8 @@ export default function Page() {
             entries={dash.entries}
             today={today}
             weeklyFocus={dash.syncState.weeklyFocus}
+            focusChecks={dash.syncState.focusChecks}
+            onSaveFocusCheck={dash.saveFocusCheck}
           />
         ) : tab === 'trends' ? (
           <Trends metrics={dash.metrics} entries={dash.entries} today={today} />
