@@ -1,6 +1,6 @@
 // Week tab — weekly scorecard (score, headline, 2-col per-metric grid with
 // delta pills vs the previous 7 days) and a 7-bar chart per active metric
-// with a dashed goal line.
+// with a dashed goal line, plus the end-of-week "did the focus hold?" check.
 
 import type { Entry, Metric } from '@/lib/types';
 import { addDays, dayLabel, lastNDates } from '@/lib/dates';
@@ -11,17 +11,23 @@ import { assessGoals, goalScore } from '@/lib/feedback';
 import DeltaPill from '../DeltaPill';
 import BarChart, { type BarDatum } from '../BarChart';
 import { focusScorecard } from '@/lib/weeklyFocus';
+import { checkWeek, type FocusChecks, type FocusRating } from '@/lib/focusCheck';
+import FocusCheck from '../FocusCheck';
 
 export default function Week({
   metrics,
   entries,
   today,
   weeklyFocus,
+  focusChecks,
+  onSaveFocusCheck,
 }: {
   metrics: Metric[];
   entries: Entry[];
   today: string;
   weeklyFocus: string;
+  focusChecks: FocusChecks;
+  onSaveFocusCheck: (rating: FocusRating, note: string) => Promise<string | null>;
 }) {
   const active = metrics.filter((m) => m.active);
   const assessments = assessGoals(metrics, entries, today);
@@ -122,6 +128,14 @@ export default function Week({
           </p>
         )}
       </section>
+
+      <FocusCheck
+        key={`${checkWeek(today)}:${focusChecks[checkWeek(today)]?.note ?? ''}`}
+        checks={focusChecks}
+        today={today}
+        hasFocus={weeklyFocus.trim() !== ''}
+        onSave={onSaveFocusCheck}
+      />
 
       {active.map((m) => {
         const map = valueMap(entries, m.id);

@@ -26,7 +26,9 @@
  *                             anything to it.
  *
  * Both formats carry the week's focus (lib/weeklyFocusStore) and its one-line
- * on track / behind scorecard (lib/weeklyFocus), or null when no focus is set.
+ * on track / behind scorecard (lib/weeklyFocus), or null when no focus is set,
+ * plus the latest end-of-week "did the focus hold?" rating (lib/focusCheck), or
+ * null when no week has been rated.
  */
 import { NextResponse } from 'next/server';
 import { extractBearerToken } from '@/lib/apiToken';
@@ -37,6 +39,8 @@ import { listAllEntries, listMetrics, setSyncValue } from '@/lib/db';
 import { jsonError, toErrorMessage } from '@/lib/http';
 import { focusScorecard } from '@/lib/weeklyFocus';
 import { getWeeklyFocus } from '@/lib/weeklyFocusStore';
+import { latestCheck } from '@/lib/focusCheck';
+import { getFocusChecks } from '@/lib/focusCheckStore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -57,11 +61,13 @@ export async function GET(req: Request) {
       return jsonError(`Unknown format "${format}". Use format=json or format=text.`, 400);
     }
 
-    const [metrics, entries, weeklyFocus] = await Promise.all([
+    const [metrics, entries, weeklyFocus, focusChecks] = await Promise.all([
       listMetrics(),
       listAllEntries(),
       getWeeklyFocus(),
+      getFocusChecks(),
     ]);
+    const lastFocusCheck = latestCheck(focusChecks);
     const today = todayISO();
     const brief = buildBrief(metrics, entries, today, { dashboardUrl: url.origin });
     const scorecard = focusScorecard(weeklyFocus, metrics, entries, today);
@@ -81,7 +87,13 @@ ${weeklyFocus}` + (scorecard ? `
 
 ${scorecard.text}` : '')
         : '';
-      return new NextResponse(renderBriefText(brief) + focusText, {
+      const checkText = lastFocusCheck
+        ? `
+
+Last focus check (week of ${lastFocusCheck.week}): ${lastFocusCheck.rating}` +
+          (lastFocusCheck.note ? ` — ${lastFocusCheck.note}` : '')
+        : '';
+      return new NextResponse(renderBriefText(brief) + focusText + checkText, {
         headers: {
           'content-type': 'text/plain; charset=utf-8',
           // The brief is a snapshot of a day in progress. A cached copy served
@@ -92,7 +104,7 @@ ${scorecard.text}` : '')
     }
 
     return NextResponse.json(
-      { ...brief, weeklyFocus: weeklyFocus || null, focusScorecard: scorecard },
+      { ...brief, weeklyFocus: weeklyFocus || null, focusScorecard: scorecard, lastFocusCheck },
       { headers: { 'cache-control': 'no-store' } },
     );
   } catch (e) {
